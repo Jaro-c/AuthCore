@@ -17,6 +17,8 @@ package keymanager
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,6 +53,7 @@ type KeyManager struct {
 	privateKey    ed25519.PrivateKey
 	publicKey     ed25519.PublicKey
 	refreshSecret []byte
+	keyID         string
 }
 
 // New initialises the KeyManager for the given directory.
@@ -85,7 +88,17 @@ func New(dir string, log logger) (*KeyManager, error) {
 		privateKey:    priv,
 		publicKey:     pub,
 		refreshSecret: secret,
+		keyID:         computeKeyID(pub),
 	}, nil
+}
+
+// computeKeyID derives a stable identifier from a public key.
+// It returns the first 8 bytes of the SHA-256 digest of the raw public key
+// bytes, hex-encoded (16 lowercase characters). The value changes automatically
+// when the key is rotated, making it suitable as a JOSE "kid" header value.
+func computeKeyID(pub ed25519.PublicKey) string {
+	h := sha256.Sum256(pub)
+	return hex.EncodeToString(h[:8])
 }
 
 // PrivateKey returns the Ed25519 private key used for signing operations.
@@ -105,6 +118,12 @@ func (km *KeyManager) PublicKey() ed25519.PublicKey {
 // The returned slice must not be modified by the caller.
 func (km *KeyManager) RefreshSecret() []byte {
 	return km.refreshSecret
+}
+
+// KeyID returns the stable identifier for the current signing key.
+// See computeKeyID for the derivation details.
+func (km *KeyManager) KeyID() string {
+	return km.keyID
 }
 
 // Dir returns the absolute path of the key directory.

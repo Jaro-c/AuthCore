@@ -20,6 +20,12 @@ type Keys interface {
 	// tokens before they are stored in a database.
 	// The caller must not modify the returned slice.
 	RefreshSecret() []byte
+
+	// KeyID returns the stable identifier for the current signing key.
+	// It is derived from the public key and embedded in the "kid" JOSE header
+	// of every issued token so that verifiers can select the correct key when
+	// multiple keys are in circulation (e.g. during key rotation).
+	KeyID() string
 }
 
 // Provider is the narrow interface that *AuthCore satisfies.
