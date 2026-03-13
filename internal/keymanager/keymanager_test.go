@@ -1,0 +1,217 @@
+package keymanager_test
+
+import (
+	"crypto/ed25519"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/Jaro-c/authcore/internal/keymanager"
+)
+
+// testLogger satisfies the unexported keymanager.logger interface via
+// structural typing and forwards entries to the test log.
+type testLogger struct{ t *testing.T }
+
+func (l testLogger) Info(msg string, args ...any) { l.t.Logf("[INFO] "+msg, args...) }
+func (l testLogger) Warn(msg string, args ...any) { l.t.Logf("[WARN] "+msg, args...) }
+
+// newKM is a helper that creates a KeyManager in t.TempDir() and fails fast
+// on any error.
+func newKM(t *testing.T) *keymanager.KeyManager {
+	t.Helper()
+	km, err := keymanager.New(t.TempDir(), testLogger{t})
+	if err != nil {
+		t.Fatalf("keymanager.New() unexpected error: %v", err)
+	}
+	return km
+}
+
+// ----- generation -------------------------------------------------------------
+
+func TestNew_generatesAllFiles(t *testing.T) {
+	dir := t.TempDir()
+	_, err := keymanager.New(dir, testLogger{t})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	wantFiles := []string{
+		".gitignore",
+		"ed25519_private.pem",
+		"ed25519_public.pem",
+		"refresh_secret.key",
+	}
+	for _, f := range wantFiles {
+		if _, err := os.Stat(filepath.Join(dir, f)); os.IsNotExist(err) {
+			t.Errorf("expected file %q was not created", f)
+		}
+	}
+}
+
+func TestNew_keyMaterialHasCorrectSize(t *testing.T) {
+	km := newKM(t)
+
+	if got := len(km.PrivateKey()); got != ed25519.PrivateKeySize {
+		t.Errorf("PrivateKey() length = %d, want %d", got, ed25519.PrivateKeySize)
+	}
+	if got := len(km.PublicKey()); got != ed25519.PublicKeySize {
+		t.Errorf("PublicKey() length = %d, want %d", got, ed25519.PublicKeySize)
+	}
+	if got := len(km.RefreshSecret()); got != 32 {
+		t.Errorf("RefreshSecret() length = %d, want 32", got)
+	}
+}
+
+func TestNew_publicKeyMatchesPrivateKey(t *testing.T) {
+	km := newKM(t)
+
+	derived := km.PrivateKey().Public().(ed25519.PublicKey)
+	if !derived.Equal(km.PublicKey()) {
+		t.Error("public key does not match the public half of the private key")
+	}
+}
+
+func TestNew_keysAreDifferentAcrossInstances(t *testing.T) {
+	km1 := newKM(t)
+	km2 := newKM(t)
+
+	if km1.PrivateKey().Equal(km2.PrivateKey()) {
+		t.Error("two independently generated private keys must not be equal")
+	}
+}
+
+// ----- persistence ------------------------------------------------------------
+
+func TestNew_loadsExistingKeysOnSecondRun(t *testing.T) {
+	dir := t.TempDir()
+	log := testLogger{t}
+
+	km1, err := keymanager.New(dir, log)
+	if err != nil {
+		t.Fatalf("first New() error = %v", err)
+	}
+
+	km2, err := keymanager.New(dir, log)
+	if err != nil {
+		t.Fatalf("second New() error = %v", err)
+	}
+
+	if !km1.PrivateKey().Equal(km2.PrivateKey()) {
+		t.Error("private key changed between runs")
+	}
+	if !km1.PublicKey().Equal(km2.PublicKey()) {
+		t.Error("public key changed between runs")
+	}
+	if string(km1.RefreshSecret()) != string(km2.RefreshSecret()) {
+		t.Error("refresh secret changed between runs")
+	}
+}
+
+// ----- .gitignore -------------------------------------------------------------
+
+func TestNew_gitignoreCreated(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := keymanager.New(dir, testLogger{t}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	path := filepath.Join(dir, ".gitignore")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf(".gitignore not created: %v", err)
+	}
+	// The .gitignore must contain a catch-all pattern.
+	if len(data) == 0 {
+		t.Error(".gitignore is empty")
+	}
+}
+
+func TestNew_gitignoreNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	custom := []byte("# custom\n*.bak\n")
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), custom, 0600); err != nil {
+		t.Fatalf("write custom .gitignore: %v", err)
+	}
+
+	if _, err := keymanager.New(dir, testLogger{t}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if string(data) != string(custom) {
+		t.Error("existing .gitignore was overwritten")
+	}
+}
+
+// ----- file permissions -------------------------------------------------------
+
+func TestNew_privateKeyPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permission model does not apply on Windows")
+	}
+
+	dir := t.TempDir()
+	if _, err := keymanager.New(dir, testLogger{t}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, "ed25519_private.pem"))
+	if err != nil {
+		t.Fatalf("stat private key: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Errorf("private key permissions = %04o, want 0600", got)
+	}
+}
+
+func TestNew_refreshSecretPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permission model does not apply on Windows")
+	}
+
+	dir := t.TempDir()
+	if _, err := keymanager.New(dir, testLogger{t}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, "refresh_secret.key"))
+	if err != nil {
+		t.Fatalf("stat refresh secret: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Errorf("refresh secret permissions = %04o, want 0600", got)
+	}
+}
+
+// ----- error paths ------------------------------------------------------------
+
+func TestNew_inconsistentStateReturnsError(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create only the private key — the public key is missing.
+	// New() must detect the inconsistency and return an error.
+	if _, err := keymanager.New(dir, testLogger{t}); err != nil {
+		t.Fatalf("initial New() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(dir, "ed25519_public.pem")); err != nil {
+		t.Fatalf("remove public key: %v", err)
+	}
+
+	_, err := keymanager.New(dir, testLogger{t})
+	if err == nil {
+		t.Error("expected error for inconsistent key state, got nil")
+	}
+}
+
+func TestNew_dirReturnsCorrectPath(t *testing.T) {
+	dir := t.TempDir()
+	km, err := keymanager.New(dir, testLogger{t})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if km.Dir() != dir {
+		t.Errorf("Dir() = %q, want %q", km.Dir(), dir)
+	}
+}
