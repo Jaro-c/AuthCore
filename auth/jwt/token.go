@@ -38,11 +38,12 @@ type authClaims struct {
 }
 
 // newAccessClaims builds the claim set for an access token.
-func newAccessClaims(issuer, subject string, now time.Time, ttl time.Duration) *authClaims {
+func newAccessClaims(issuer, subject, jti string, now time.Time, ttl time.Duration) *authClaims {
 	return &authClaims{
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Issuer:    issuer,
 			Subject:   subject,
+			ID:        jti,
 			IssuedAt:  gjwt.NewNumericDate(now),
 			ExpiresAt: gjwt.NewNumericDate(now.Add(ttl)),
 		},
@@ -65,8 +66,10 @@ func newRefreshClaims(issuer, subject, jti string, now time.Time, ttl time.Durat
 }
 
 // signToken encodes claims as a signed EdDSA JWT and returns the compact serialisation.
-func signToken(claims *authClaims, key ed25519.PrivateKey) (string, error) {
+// kid is embedded in the JOSE header so verifiers can select the correct public key.
+func signToken(claims *authClaims, key ed25519.PrivateKey, kid string) (string, error) {
 	token := gjwt.NewWithClaims(gjwt.SigningMethodEdDSA, claims)
+	token.Header["kid"] = kid
 	signed, err := token.SignedString(key)
 	if err != nil {
 		return "", fmt.Errorf("sign token: %w", err)

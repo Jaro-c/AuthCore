@@ -67,6 +67,7 @@ type JWT struct {
 	priv   ed25519.PrivateKey
 	pub    ed25519.PublicKey
 	secret []byte      // HMAC-SHA256 key for hashing refresh tokens
+	kid    string      // JOSE "kid" header value, derived from the public key
 	clock  clock.Clock // injected; replaced by clock.Fixed in tests
 }
 
@@ -91,6 +92,7 @@ func New(p authcore.Provider, cfg Config) (*JWT, error) {
 		priv:   p.Keys().PrivateKey(),
 		pub:    p.Keys().PublicKey(),
 		secret: p.Keys().RefreshSecret(),
+		kid:    p.Keys().KeyID(),
 		clock:  clock.New(p.Config().Timezone),
 	}
 
@@ -113,6 +115,7 @@ func (j *JWT) Name() string { return "jwt" }
 // The returned TokenPair contains:
 //
 //	pair.AccessToken           — include in Authorization: Bearer on API requests
+//	pair.AccessTokenID         — UUID v7 jti of the access token; use for audit / revocation
 //	pair.AccessTokenExpiresAt  — send to the client to schedule proactive renewal
 //	pair.RefreshToken          — store in a secure, httpOnly client-side location
 //	pair.RefreshTokenExpiresAt — when the user must log in again
@@ -127,31 +130,36 @@ func (j *JWT) CreateTokens(subject string) (*TokenPair, error) {
 
 	now := j.clock.Now()
 
-	// ----- Access token (no jti — short-lived, not tracked by the DB) -----
-	accessToken, err := signToken(newAccessClaims(j.cfg.Issuer, subject, now, j.cfg.AccessTokenTTL), j.priv)
+	// ----- Access token -----
+	accessJTI, err := generateJTI(now)
+	if err != nil {
+		return nil, err
+	}
+	accessToken, err := signToken(newAccessClaims(j.cfg.Issuer, subject, accessJTI, now, j.cfg.AccessTokenTTL), j.priv, j.kid)
 	if err != nil {
 		return nil, fmt.Errorf("sign access token: %w", err)
 	}
 
 	// ----- Refresh token (carries a jti for rotation tracking) -----
-	jti, err := generateJTI(now)
+	refreshJTI, err := generateJTI(now)
 	if err != nil {
 		return nil, err
 	}
-	refreshToken, err := signToken(newRefreshClaims(j.cfg.Issuer, subject, jti, now, j.cfg.RefreshTokenTTL), j.priv)
+	refreshToken, err := signToken(newRefreshClaims(j.cfg.Issuer, subject, refreshJTI, now, j.cfg.RefreshTokenTTL), j.priv, j.kid)
 	if err != nil {
 		return nil, fmt.Errorf("sign refresh token: %w", err)
 	}
 
-	j.log.Debug("jwt: token pair created (sub=%s, jti=%s)", subject, jti)
+	j.log.Debug("jwt: token pair created (sub=%s, access_jti=%s, refresh_jti=%s)", subject, accessJTI, refreshJTI)
 
 	return &TokenPair{
 		AccessToken:           accessToken,
+		AccessTokenID:         accessJTI,
 		AccessTokenExpiresAt:  now.Add(j.cfg.AccessTokenTTL),
 		RefreshToken:          refreshToken,
 		RefreshTokenExpiresAt: now.Add(j.cfg.RefreshTokenTTL),
 		RefreshTokenHash:      computeHMAC(refreshToken, j.secret),
-		SessionID:             jti,
+		SessionID:             refreshJTI,
 	}, nil
 }
 

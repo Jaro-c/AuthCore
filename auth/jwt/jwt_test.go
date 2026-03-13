@@ -7,6 +7,8 @@ package jwt
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -28,6 +30,7 @@ type fakeKeys struct {
 func (k *fakeKeys) PrivateKey() ed25519.PrivateKey { return k.priv }
 func (k *fakeKeys) PublicKey() ed25519.PublicKey   { return k.pub }
 func (k *fakeKeys) RefreshSecret() []byte          { return k.secret }
+func (k *fakeKeys) KeyID() string                  { return "test0000test0000" }
 
 // fakeProvider satisfies authcore.Provider using in-memory state.
 type fakeProvider struct{ keys *fakeKeys }
@@ -545,5 +548,104 @@ func TestRotateTokens_newHashMatchesHashRefreshToken(t *testing.T) {
 	got := j.HashRefreshToken(newPair.RefreshToken)
 	if got != newPair.RefreshTokenHash {
 		t.Errorf("HashRefreshToken(new token) = %q, want %q", got, newPair.RefreshTokenHash)
+	}
+}
+
+// ---- kid header -------------------------------------------------------------
+
+// tokenHeader decodes the JOSE header of a compact JWT string.
+func tokenHeader(t *testing.T, tokenStr string) map[string]any {
+	t.Helper()
+	parts := strings.SplitN(tokenStr, ".", 3)
+	if len(parts) != 3 {
+		t.Fatalf("token has %d parts, want 3", len(parts))
+	}
+	data, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		t.Fatalf("decode header: %v", err)
+	}
+	var h map[string]any
+	if err := json.Unmarshal(data, &h); err != nil {
+		t.Fatalf("unmarshal header: %v", err)
+	}
+	return h
+}
+
+func TestCreateTokens_accessTokenHeaderContainsKid(t *testing.T) {
+	j := newTestJWT(t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens("0191b432-b5a7-7c4f-b2e6-7a3f1d2e0001")
+
+	h := tokenHeader(t, pair.AccessToken)
+	kid, ok := h["kid"].(string)
+	if !ok || kid == "" {
+		t.Errorf("access token header missing or empty kid: %v", h)
+	}
+	if kid != "test0000test0000" {
+		t.Errorf("kid = %q, want %q", kid, "test0000test0000")
+	}
+}
+
+func TestCreateTokens_refreshTokenHeaderContainsKid(t *testing.T) {
+	j := newTestJWT(t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens("0191b432-b5a7-7c4f-b2e6-7a3f1d2e0001")
+
+	h := tokenHeader(t, pair.RefreshToken)
+	kid, ok := h["kid"].(string)
+	if !ok || kid == "" {
+		t.Errorf("refresh token header missing or empty kid: %v", h)
+	}
+	if kid != "test0000test0000" {
+		t.Errorf("kid = %q, want %q", kid, "test0000test0000")
+	}
+}
+
+func TestCreateTokens_bothTokensShareSameKid(t *testing.T) {
+	j := newTestJWT(t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens("0191b432-b5a7-7c4f-b2e6-7a3f1d2e0001")
+
+	accessKid := tokenHeader(t, pair.AccessToken)["kid"]
+	refreshKid := tokenHeader(t, pair.RefreshToken)["kid"]
+	if accessKid != refreshKid {
+		t.Errorf("access kid %q != refresh kid %q", accessKid, refreshKid)
+	}
+}
+
+// ---- access token jti -------------------------------------------------------
+
+func TestCreateTokens_accessTokenIDIsUUIDv7(t *testing.T) {
+	j := newTestJWT(t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens("0191b432-b5a7-7c4f-b2e6-7a3f1d2e0001")
+
+	id := pair.AccessTokenID
+	if len(id) != 36 {
+		t.Fatalf("AccessTokenID length = %d, want 36", len(id))
+	}
+	if id[14] != '7' {
+		t.Errorf("AccessTokenID version digit = %q, want '7'", id[14])
+	}
+	if id[19] != '8' && id[19] != '9' && id[19] != 'a' && id[19] != 'b' {
+		t.Errorf("AccessTokenID variant nibble = %q, want 8/9/a/b", id[19])
+	}
+}
+
+func TestCreateTokens_accessTokenIDExposedInClaims(t *testing.T) {
+	j := newTestJWT(t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens("0191b432-b5a7-7c4f-b2e6-7a3f1d2e0001")
+
+	claims, err := j.VerifyAccessToken(pair.AccessToken)
+	if err != nil {
+		t.Fatalf("VerifyAccessToken() error = %v", err)
+	}
+	if claims.TokenID != pair.AccessTokenID {
+		t.Errorf("Claims.TokenID = %q, want %q", claims.TokenID, pair.AccessTokenID)
+	}
+}
+
+func TestCreateTokens_accessAndRefreshJTIsAreDifferent(t *testing.T) {
+	j := newTestJWT(t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens("0191b432-b5a7-7c4f-b2e6-7a3f1d2e0001")
+
+	if pair.AccessTokenID == pair.SessionID {
+		t.Error("access token jti and refresh token jti must not be equal")
 	}
 }

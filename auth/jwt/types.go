@@ -11,6 +11,11 @@ type TokenPair struct {
 	// Default lifetime: 15 minutes.
 	AccessToken string
 
+	// AccessTokenID is the UUID v7 that uniquely identifies this access token.
+	// It is the "jti" claim embedded in the AccessToken.
+	// Use it for audit logging or access token revocation (blocklist by jti).
+	AccessTokenID string
+
 	// AccessTokenExpiresAt is when AccessToken expires.
 	// Send this to the client so it can schedule a token refresh proactively.
 	AccessTokenExpiresAt time.Time
