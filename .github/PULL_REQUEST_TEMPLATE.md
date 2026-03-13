@@ -1,30 +1,37 @@
 ## Description
 
-Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context.
+Summarize the change and link the related issue.
 
 Fixes # (issue)
 
 ## Type of change
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Bug fix (non-breaking)
+- [ ] New feature (non-breaking)
+- [ ] Breaking change
+- [ ] Security fix
 - [ ] Documentation update
 
-## How Has This Been Tested?
+## Security impact
 
-Please describe the tests that you ran to verify your changes.
+Does this change affect cryptographic operations, token handling, key management, or any security boundary?
 
-- [ ] `go test ./...`
-- [ ] Specific test case added for this PR
+- [ ] No security impact
+- [ ] Yes — describe below
 
-## Checklist:
+<!-- If yes, explain: what was the risk, how is it addressed, and what threat model was considered. -->
 
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
-- [ ] Any dependent changes have been merged and published in downstream modules
+## Testing
+
+- [ ] `go test -race ./...` passes locally
+- [ ] New tests added for this change
+- [ ] Existing tests updated where necessary
+- [ ] Tested with the race detector (`-race`)
+
+## Checklist
+
+- [ ] Code follows the project style (`go fmt`, `go vet`, `golangci-lint`)
+- [ ] All exported symbols have godoc comments
+- [ ] `README.md` updated if public API changed
+- [ ] No sensitive data (keys, tokens, secrets) is logged or exposed in tests
+- [ ] Dependent changes merged and published upstream (if any)
