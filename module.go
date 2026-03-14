@@ -59,11 +59,9 @@ type Provider interface {
 // implement. It acts as a marker interface today and will grow as shared
 // lifecycle requirements (e.g. Close, HealthCheck) are identified.
 //
-// Planned implementations:
+// Available implementations:
 //
-//	auth/jwt    — JSON Web Token authentication
-//	auth/apikey — opaque API-key generation and validation
-//	auth/oauth  — OAuth 2.0 / OIDC flows
+//	auth/jwt — JSON Web Token authentication (EdDSA / Ed25519)
 //
 // Module constructors follow the convention:
 //

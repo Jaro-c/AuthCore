@@ -215,3 +215,52 @@ func TestNew_dirReturnsCorrectPath(t *testing.T) {
 		t.Errorf("Dir() = %q, want %q", km.Dir(), dir)
 	}
 }
+
+// ----- KeyID -----------------------------------------------------------------
+
+func TestKeyID_isNonEmpty(t *testing.T) {
+	km := newKM(t)
+	if km.KeyID() == "" {
+		t.Error("KeyID() returned empty string")
+	}
+}
+
+func TestKeyID_is16HexCharacters(t *testing.T) {
+	km := newKM(t)
+	id := km.KeyID()
+	if len(id) != 16 {
+		t.Fatalf("KeyID() length = %d, want 16", len(id))
+	}
+	for _, c := range id {
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+			t.Errorf("KeyID() contains non-hex character %q", c)
+		}
+	}
+}
+
+func TestKeyID_isDeterministicAcrossLoads(t *testing.T) {
+	dir := t.TempDir()
+	log := testLogger{t}
+
+	km1, err := keymanager.New(dir, log)
+	if err != nil {
+		t.Fatalf("first New() error = %v", err)
+	}
+	km2, err := keymanager.New(dir, log)
+	if err != nil {
+		t.Fatalf("second New() error = %v", err)
+	}
+
+	if km1.KeyID() != km2.KeyID() {
+		t.Errorf("KeyID changed between loads: %q vs %q", km1.KeyID(), km2.KeyID())
+	}
+}
+
+func TestKeyID_differentKeysProduceDifferentIDs(t *testing.T) {
+	km1 := newKM(t)
+	km2 := newKM(t)
+
+	if km1.KeyID() == km2.KeyID() {
+		t.Error("independently generated keys must not produce the same KeyID")
+	}
+}

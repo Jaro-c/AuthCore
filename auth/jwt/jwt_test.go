@@ -751,6 +751,151 @@ func TestRotateTokens_newHashMatchesHashRefreshToken(t *testing.T) {
 	}
 }
 
+// ---- VerifyRefreshTokenHash() -----------------------------------------------
+
+func TestVerifyRefreshTokenHash_matchesStoredHash(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	if !j.VerifyRefreshTokenHash(pair.RefreshToken, pair.RefreshTokenHash) {
+		t.Error("VerifyRefreshTokenHash returned false for a valid token/hash pair")
+	}
+}
+
+func TestVerifyRefreshTokenHash_modifiedTokenDoesNotMatch(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	if j.VerifyRefreshTokenHash(pair.RefreshToken+"X", pair.RefreshTokenHash) {
+		t.Error("VerifyRefreshTokenHash returned true for a modified token")
+	}
+}
+
+func TestVerifyRefreshTokenHash_modifiedHashDoesNotMatch(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	badHash := strings.Repeat("0", 64)
+	if j.VerifyRefreshTokenHash(pair.RefreshToken, badHash) {
+		t.Error("VerifyRefreshTokenHash returned true for a tampered hash")
+	}
+}
+
+func TestVerifyRefreshTokenHash_emptyTokenDoesNotMatch(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	if j.VerifyRefreshTokenHash("", pair.RefreshTokenHash) {
+		t.Error("VerifyRefreshTokenHash returned true for empty token")
+	}
+}
+
+func TestVerifyRefreshTokenHash_emptyHashDoesNotMatch(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	if j.VerifyRefreshTokenHash(pair.RefreshToken, "") {
+		t.Error("VerifyRefreshTokenHash returned true for empty stored hash")
+	}
+}
+
+func TestVerifyRefreshTokenHash_consistentWithHashRefreshToken(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	hash := j.HashRefreshToken(pair.RefreshToken)
+	if !j.VerifyRefreshTokenHash(pair.RefreshToken, hash) {
+		t.Error("VerifyRefreshTokenHash disagrees with HashRefreshToken for the same input")
+	}
+}
+
+// ---- ClockSkewLeeway --------------------------------------------------------
+
+func TestNew_negativeLeewayReturnsErrInvalidConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ClockSkewLeeway = -1 * time.Second
+
+	_, err := New[struct{}](newFakeProvider(t), cfg)
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Errorf("expected ErrInvalidConfig, got %v", err)
+	}
+}
+
+func TestVerifyAccessToken_tokenWithinLeewayIsAccepted(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AccessTokenTTL = 10 * time.Minute
+	cfg.ClockSkewLeeway = 30 * time.Second
+	j := newTestJWT[struct{}](t, newFakeProvider(t), cfg)
+
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	// Advance 20 s past expiry — within the 30 s leeway window.
+	j.clock = clock.Fixed(epoch.Add(10*time.Minute + 20*time.Second))
+	if _, err := j.VerifyAccessToken(pair.AccessToken); err != nil {
+		t.Errorf("token within leeway should be accepted, got %v", err)
+	}
+}
+
+func TestVerifyAccessToken_tokenBeyondLeewayIsRejected(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AccessTokenTTL = 10 * time.Minute
+	cfg.ClockSkewLeeway = 30 * time.Second
+	j := newTestJWT[struct{}](t, newFakeProvider(t), cfg)
+
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	// Advance 31 s past expiry — beyond the leeway window.
+	j.clock = clock.Fixed(epoch.Add(10*time.Minute + 31*time.Second))
+	_, err := j.VerifyAccessToken(pair.AccessToken)
+	if !errors.Is(err, ErrTokenExpired) {
+		t.Errorf("token beyond leeway should return ErrTokenExpired, got %v", err)
+	}
+}
+
+// ---- applyDefaults ----------------------------------------------------------
+
+func TestApplyDefaults_zeroTTLsAreFilledFromDefaults(t *testing.T) {
+	cfg := Config{
+		Issuer:   "my-service",
+		Audience: []string{"my-audience"},
+		// AccessTokenTTL and RefreshTokenTTL intentionally zero
+	}
+	j, err := New[struct{}](newFakeProvider(t), cfg)
+	if err != nil {
+		t.Fatalf("New() with zero TTLs error = %v", err)
+	}
+	if j.cfg.AccessTokenTTL != DefaultConfig().AccessTokenTTL {
+		t.Errorf("AccessTokenTTL not filled: got %v", j.cfg.AccessTokenTTL)
+	}
+	if j.cfg.RefreshTokenTTL != DefaultConfig().RefreshTokenTTL {
+		t.Errorf("RefreshTokenTTL not filled: got %v", j.cfg.RefreshTokenTTL)
+	}
+}
+
+func TestApplyDefaults_zeroIssuerIsFilledFromDefaults(t *testing.T) {
+	cfg := Config{Audience: []string{"x"}}
+	j, err := New[struct{}](newFakeProvider(t), cfg)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if j.cfg.Issuer != DefaultConfig().Issuer {
+		t.Errorf("Issuer not filled: got %q", j.cfg.Issuer)
+	}
+}
+
+func TestApplyDefaults_zeroAudienceIsFilledFromDefaults(t *testing.T) {
+	cfg := Config{Issuer: "x"}
+	j, err := New[struct{}](newFakeProvider(t), cfg)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if len(j.cfg.Audience) == 0 {
+		t.Error("Audience not filled from defaults")
+	}
+}
+
+// ---- TestRotateTokens_freshClaimsEmbeddedInNewAccessToken -------------------
+
 func TestRotateTokens_freshClaimsEmbeddedInNewAccessToken(t *testing.T) {
 	j := newTestJWT[testUserClaims](t, newFakeProvider(t), DefaultConfig())
 	old, _ := j.CreateTokens(testSubject, testUserClaims{Name: "Juan", Role: "user"})

@@ -309,9 +309,7 @@ authcore/
 │   └── keymanager/      # Ed25519 + HMAC key generation, persistence, validation
 │
 ├── auth/
-│   ├── jwt/             # JSON Web Token authentication   ← fully implemented
-│   ├── apikey/          # Opaque API-key authentication   (planned)
-│   └── oauth/           # OAuth 2.0 / OIDC               (planned)
+│   └── jwt/             # JSON Web Token authentication (EdDSA / Ed25519)
 │
 └── examples/
     └── basic/           # Runnable end-to-end example
@@ -321,8 +319,6 @@ authcore/
 |---|---|---|
 | `github.com/Jaro-c/authcore` | public | Core types and entry point |
 | `…/auth/jwt` | public | JWT module |
-| `…/auth/apikey` | public | API key module *(planned)* |
-| `…/auth/oauth` | public | OAuth 2.0 / OIDC module *(planned)* |
 | `…/internal/clock` | internal | Shared time abstraction |
 | `…/internal/keymanager` | internal | Key generation and persistence |
 
@@ -406,9 +402,9 @@ if errors.Is(err, jwt.ErrTokenExpired) {
 
 - [x] Core library — key management, logger, clock, Provider interface
 - [x] `auth/jwt` — EdDSA token issuance, verification, rotation, timing-safe hash
-- [ ] `auth/apikey` — opaque key generation with pluggable store interface
-- [ ] `auth/oauth` — OAuth 2.0 / OIDC provider integration
-- [ ] Key rotation helpers — zero-downtime rotation via `kid` header
+- [ ] `auth/apikey` — opaque key generation with pluggable store interface *(future)*
+- [ ] `auth/oauth` — OAuth 2.0 / OIDC provider integration *(future)*
+- [ ] Key rotation helpers — zero-downtime rotation via `kid` header *(future)*
 
 ---
 
