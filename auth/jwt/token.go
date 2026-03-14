@@ -11,7 +11,7 @@ package jwt
 // Signature: Ed25519 signature over the raw "header.payload" ASCII bytes
 //
 // Access token payload : iss, sub, iat, exp, jti, type, extra
-// Refresh token payload: iss, sub, exp, jti, type  (no iat, no extra)
+// Refresh token payload: iss, sub, iat, exp, jti, type  (no extra)
 
 import (
 	"crypto/ed25519"
