@@ -70,21 +70,50 @@ version bump.
 
 ---
 
-## [Unreleased]
+## [1.1.0] - 2026-03-14
 
 ### Added
 
 #### Password module (`github.com/Jaro-c/authcore/auth/password`)
-- `New(p Provider, cfg Config) (*Password, error)` — creates the password module.
+- `New(p Provider, cfg ...Config) (*Password, error)` — creates the password
+  module. Config is optional; omitting it applies OWASP-recommended defaults.
 - `DefaultConfig() Config` — returns OWASP-recommended Argon2id defaults
   (`Memory=64MiB`, `Iterations=3`, `Parallelism=2`).
-- `(*Password).Hash(plaintext string) (string, error)` — derives an Argon2id
-  hash with a fresh random salt and returns it in PHC string format.
+- `(*Password).Hash(plaintext string) (string, error)` — validates the
+  password against the built-in policy, then derives an Argon2id hash with a
+  fresh random salt and returns it in PHC string format.
 - `(*Password).Verify(plaintext, phcHash string) (bool, error)` — verifies a
   password against a stored PHC hash using constant-time comparison
   (`crypto/subtle`). Parameters are read from the stored hash, so existing
   hashes remain valid after the module's Config is updated.
-- Sentinel errors: `ErrInvalidConfig`, `ErrInvalidHash`.
+- Built-in password policy enforced in `Hash`: 12–64 characters, at least one
+  uppercase letter, one lowercase letter, one digit, and one special character.
+  Disable via `Config.DisablePolicy` for migration scenarios.
+- Sentinel errors: `ErrInvalidConfig`, `ErrInvalidHash`, `ErrWeakPassword`.
+
+### Security
+
+- Updated `golang.org/x/crypto` to v0.45.0, patching three vulnerabilities in
+  the `ssh` and `ssh/agent` packages (GO-2025-4116, GO-2025-4134, GO-2025-4135).
+  None affected authcore's code paths.
+- Raised minimum Go version to 1.26.1, patching five standard library
+  vulnerabilities (GO-2026-4599 to GO-2026-4603). None affected authcore's
+  code paths.
+
+### Fixed
+
+- Corrected four documentation inaccuracies found during audit:
+  - `CreateTokens` docstring referenced non-existent `pair.AccessTokenID` field.
+  - `CreateTokens` docstring described `SessionID` as the refresh token's jti;
+    it is in fact shared by both the access and refresh tokens.
+  - `refreshClaims` internal comment incorrectly stated "no iat claim"; the
+    refresh token does include an `iat` claim.
+  - `module.go` did not list `auth/password` as an available implementation and
+    showed an outdated constructor signature.
+
+---
+
+## [Unreleased]
 
 ### Planned
 
