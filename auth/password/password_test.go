@@ -297,6 +297,50 @@ func TestCheckPolicy_boundaryLengths(t *testing.T) {
 	}
 }
 
+// ---- parsePHC() -------------------------------------------------------------
+
+func TestParsePHC_wrongSegmentCount(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=65536,t=3,p=2$onlyfour")
+	if err == nil {
+		t.Error("expected error for wrong segment count, got nil")
+	}
+}
+
+func TestParsePHC_unparsableVersion(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=abc$m=65536,t=3,p=2$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for unparsable version, got nil")
+	}
+}
+
+func TestParsePHC_unsupportedVersion(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=18$m=65536,t=3,p=2$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for unsupported Argon2 version, got nil")
+	}
+}
+
+func TestParsePHC_unparsableParams(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$invalid$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for unparsable parameters, got nil")
+	}
+}
+
+func TestParsePHC_invalidBase64Salt(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=65536,t=3,p=2$!!!notbase64!!!$a2V5")
+	if err == nil {
+		t.Error("expected error for invalid base64 salt, got nil")
+	}
+}
+
+func TestParsePHC_invalidBase64Key(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=65536,t=3,p=2$c2FsdA$!!!notbase64!!!")
+	if err == nil {
+		t.Error("expected error for invalid base64 key, got nil")
+	}
+}
+
 // ---- DefaultConfig() --------------------------------------------------------
 
 func TestDefaultConfig_values(t *testing.T) {

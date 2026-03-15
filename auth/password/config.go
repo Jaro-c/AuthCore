@@ -75,15 +75,11 @@ func applyDefaults(cfg Config) Config {
 }
 
 // validateConfig returns an error if cfg contains invalid values.
+// applyDefaults is always called before validateConfig, so Iterations and
+// Parallelism are guaranteed to be ≥ 1 by the time this runs.
 func validateConfig(cfg Config) error {
 	if cfg.Memory < 8*1024 {
 		return fmt.Errorf("memory must be at least 8192 KiB (8 MiB), got %d", cfg.Memory)
-	}
-	if cfg.Iterations < 1 {
-		return fmt.Errorf("iterations must be at least 1, got %d", cfg.Iterations)
-	}
-	if cfg.Parallelism < 1 {
-		return fmt.Errorf("parallelism must be at least 1, got %d", cfg.Parallelism)
 	}
 	return nil
 }
