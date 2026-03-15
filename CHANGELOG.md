@@ -72,6 +72,22 @@ version bump.
 
 ## [Unreleased]
 
+### Added
+
+#### Password module (`github.com/Jaro-c/authcore/auth/password`)
+- `New(p Provider, cfg Config) (*Password, error)` — creates the password module.
+- `DefaultConfig() Config` — returns OWASP-recommended Argon2id defaults
+  (`Memory=64MiB`, `Iterations=3`, `Parallelism=2`).
+- `(*Password).Hash(plaintext string) (string, error)` — derives an Argon2id
+  hash with a fresh random salt and returns it in PHC string format.
+- `(*Password).Verify(plaintext, phcHash string) (bool, error)` — verifies a
+  password against a stored PHC hash using constant-time comparison
+  (`crypto/subtle`). Parameters are read from the stored hash, so existing
+  hashes remain valid after the module's Config is updated.
+- Sentinel errors: `ErrInvalidConfig`, `ErrInvalidHash`.
+
+### Planned
+
 - `auth/apikey` — opaque API-key generation with pluggable store interface.
 - `auth/oauth` — OAuth 2.0 / OIDC provider integration.
 - Key rotation helpers — zero-downtime rotation utilities.

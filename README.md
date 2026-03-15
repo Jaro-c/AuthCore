@@ -25,6 +25,11 @@ go get github.com/Jaro-c/authcore
   - [Authenticating requests](#authenticating-requests)
   - [Rotating tokens](#rotating-tokens)
   - [Clock skew tolerance](#clock-skew-tolerance)
+- [Password Hashing](#password-hashing)
+  - [Setup](#setup-1)
+  - [Hashing a password](#hashing-a-password)
+  - [Verifying a password](#verifying-a-password)
+  - [Tuning work parameters](#tuning-work-parameters)
 - [Key Management](#key-management)
 - [Configuration](#configuration)
 - [Custom Logger](#custom-logger)
@@ -42,13 +47,14 @@ go get github.com/Jaro-c/authcore
 
 - **EdDSA / Ed25519 token signing** — fast, constant-time, no padding-oracle risk
 - **Dual-token model** — short-lived access tokens + long-lived refresh tokens
+- **Argon2id password hashing** — memory-hard, GPU/ASIC-resistant, PHC format
 - **Automatic key management** — generates, persists, and loads keys on first run
 - **Generic custom claims** — embed any struct in access tokens with full type safety
-- **Timing-safe hash verification** — `subtle.ConstantTimeCompare` for refresh token lookup
+- **Timing-safe comparisons** — `subtle.ConstantTimeCompare` throughout
 - **Clock skew tolerance** — configurable leeway for distributed deployments
 - **Pluggable logger** — bring slog, zap, zerolog, or any custom backend
 - **Testable by design** — injectable clock and `Provider` interface for unit tests
-- **Zero forced dependencies** — only one external dependency (`golang-jwt/jwt/v5`)
+- **Minimal dependencies** — `golang-jwt/jwt/v5` and `golang.org/x/crypto`
 
 ---
 
@@ -217,6 +223,97 @@ Keep it small — large values reduce the security margin of short-lived tokens.
 
 ---
 
+## Password Hashing
+
+### Setup
+
+```go
+auth, err := authcore.New(authcore.DefaultConfig())
+if err != nil {
+    log.Fatal(err)
+}
+
+pwdMod, err := password.New(auth, password.DefaultConfig())
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+`password.DefaultConfig()` values (OWASP Argon2id recommendations):
+
+| Field | Default | Notes |
+|---|---|---|
+| `Memory` | `65536` (64 MiB) | KiB allocated per hash |
+| `Iterations` | `3` | Passes over memory |
+| `Parallelism` | `2` | Threads; match guaranteed CPU cores |
+
+---
+
+### Hashing a password
+
+```go
+hash, err := pwdMod.Hash(userPassword)
+if err != nil {
+    log.Fatal(err)
+}
+// Store hash in your database — never store the plaintext.
+db.StorePasswordHash(userID, hash)
+```
+
+Each call generates a fresh random salt, so two hashes of the same password
+are different strings but both verify correctly.
+
+The returned string is a self-describing **PHC format** value:
+
+```
+$argon2id$v=19$m=65536,t=3,p=2$<base64-salt>$<base64-hash>
+```
+
+All Argon2id parameters are embedded in the string, so stored hashes remain
+valid even if you tune the work parameters later.
+
+---
+
+### Verifying a password
+
+```go
+ok, err := pwdMod.Verify(submittedPassword, storedHash)
+switch {
+case errors.Is(err, password.ErrInvalidHash):
+    // 500 — hash stored in the database is malformed
+case err != nil:
+    // 500 — unexpected error
+case !ok:
+    // 401 — wrong password
+}
+```
+
+The comparison is performed in **constant time** (`crypto/subtle`) to prevent
+timing attacks. Parameters are always read from `storedHash`, not from the
+module's current `Config`.
+
+---
+
+### Tuning work parameters
+
+Increase the work factor on more capable hardware to keep hashing time around
+200–500 ms per operation:
+
+```go
+cfg := password.DefaultConfig()
+cfg.Memory      = 128 * 1024  // 128 MiB — for a dedicated auth server
+cfg.Iterations  = 4
+cfg.Parallelism = 4           // match your guaranteed CPU core count
+
+pwdMod, err := password.New(auth, cfg)
+```
+
+> **Old hashes stay valid.** Parameters are stored inside the hash string.
+> Changing `Config` only affects newly created hashes — existing users are
+> verified against the parameters that were active when their hash was created.
+
+---
+
 ## Key Management
 
 On first run authcore creates `KeysDir` (default `.authcore`) and generates:
@@ -309,7 +406,8 @@ authcore/
 │   └── keymanager/      # Ed25519 + HMAC key generation, persistence, validation
 │
 ├── auth/
-│   └── jwt/             # JSON Web Token authentication (EdDSA / Ed25519)
+│   ├── jwt/             # JSON Web Token authentication (EdDSA / Ed25519)
+│   └── password/        # Argon2id password hashing
 │
 └── examples/
     └── basic/           # Runnable end-to-end example
@@ -319,6 +417,7 @@ authcore/
 |---|---|---|
 | `github.com/Jaro-c/authcore` | public | Core types and entry point |
 | `…/auth/jwt` | public | JWT module |
+| `…/auth/password` | public | Argon2id password hashing module |
 | `…/internal/clock` | internal | Shared time abstraction |
 | `…/internal/keymanager` | internal | Key generation and persistence |
 
@@ -387,6 +486,13 @@ In tests, inject a stub `Provider` that returns fixed keys — no disk I/O requi
 | `jwt.ErrWrongTokenType` | access token passed where refresh expected, or vice-versa |
 | `jwt.ErrInvalidSubject` | subject passed to `CreateTokens` is not a UUID v7 |
 
+### auth/password package
+
+| Error | When |
+|---|---|
+| `password.ErrInvalidConfig` | `password.Config` validation failed |
+| `password.ErrInvalidHash` | stored hash is malformed or not Argon2id PHC format |
+
 Always use `errors.Is` for error inspection — errors may be wrapped:
 
 ```go
@@ -402,6 +508,7 @@ if errors.Is(err, jwt.ErrTokenExpired) {
 
 - [x] Core library — key management, logger, clock, Provider interface
 - [x] `auth/jwt` — EdDSA token issuance, verification, rotation, timing-safe hash
+- [x] `auth/password` — Argon2id password hashing with PHC format
 - [ ] `auth/apikey` — opaque key generation with pluggable store interface *(future)*
 - [ ] `auth/oauth` — OAuth 2.0 / OIDC provider integration *(future)*
 - [ ] Key rotation helpers — zero-downtime rotation via `kid` header *(future)*
