@@ -42,7 +42,7 @@ type accessClaims[T any] struct {
 }
 
 // refreshClaims is the minimal internal claim set for refresh tokens.
-// Refresh tokens carry no application-specific data and no iat claim.
+// Refresh tokens carry no application-specific data (no extra field).
 type refreshClaims struct {
 	gjwt.RegisteredClaims
 	Type string `json:"type"`

@@ -141,12 +141,13 @@ func (j *JWT[T]) Name() string { return "jwt" }
 // The returned TokenPair contains:
 //
 //	pair.AccessToken           — include in Authorization: Bearer on API requests
-//	pair.AccessTokenID         — UUID v7 jti of the access token; use for audit / revocation
 //	pair.AccessTokenExpiresAt  — send to the client to schedule proactive renewal
 //	pair.RefreshToken          — store in a secure, httpOnly client-side location
 //	pair.RefreshTokenExpiresAt — when the user must log in again
 //	pair.RefreshTokenHash      — store in your database; never store the raw token
-//	pair.SessionID             — UUID v7 jti of the refresh token; primary key for session store
+//	pair.SessionID             — UUID v7 jti shared by both tokens; primary key for session store
+//
+// The access token's individual jti is available as claims.TokenID after VerifyAccessToken.
 //
 // The library does not persist any of these values.
 func (j *JWT[T]) CreateTokens(subject string, extra T) (*TokenPair, error) {

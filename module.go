@@ -61,14 +61,15 @@ type Provider interface {
 //
 // Available implementations:
 //
-//	auth/jwt — JSON Web Token authentication (EdDSA / Ed25519)
+//	auth/jwt      — JSON Web Token authentication (EdDSA / Ed25519)
+//	auth/password — Argon2id password hashing
 //
 // Module constructors follow the convention:
 //
-//	func New(p authcore.Provider, cfg Config) (*T, error)
+//	func New(p authcore.Provider, cfg ...Config) (*T, error)
 //
-// where T is the concrete module type and cfg is the module-specific
-// configuration struct defined within each sub-package.
+// where T is the concrete module type and cfg is the optional module-specific
+// configuration. Omitting cfg applies safe, production-ready defaults.
 type Module interface {
 	// Name returns the unique, lowercase identifier of this module.
 	// It must be stable across releases because callers may use it as a key.
