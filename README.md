@@ -524,6 +524,63 @@ if errors.Is(err, jwt.ErrTokenExpired) {
 
 ---
 
+## FAQ
+
+**My access token fails verification in a distributed system — is clock skew the issue?**
+
+Yes. Different servers may have clocks that drift a few seconds apart, causing
+`ErrTokenExpired` on a brand-new token. Set `ClockSkewLeeway` in your JWT config:
+
+```go
+cfg := jwt.DefaultConfig()
+cfg.ClockSkewLeeway = 5 * time.Second
+```
+
+---
+
+**I'm getting `ErrKeyManager` on startup. What went wrong?**
+
+authcore could not read or create its key files. Check that:
+1. `KeysDir` (default `.authcore`) is writable by the process.
+2. The directory is not a read-only filesystem (common in some container setups).
+3. Existing key files are not corrupted — delete `.authcore` and let authcore regenerate them.
+
+---
+
+**Can I verify tokens issued before I rotated my signing key?**
+
+Yes. authcore embeds the `kid` (key ID) in every token header. When you add a new
+key pair, keep the old public key in the key store under its original `kid`. The
+verifier will select the right key automatically. See the
+[Key Management](#key-management) section for the rotation workflow.
+
+---
+
+**My existing password hashes were created with a different library. Can I migrate?**
+
+Yes, as long as the hashes are in PHC string format (`$argon2id$v=19$...`).
+`Verify` reads all parameters from the stored hash, so it works regardless of which
+library produced it. For hashes in a legacy format, set `DisablePolicy: true` and
+re-hash on the user's next successful login.
+
+---
+
+**The `Hash` call is slower than expected in tests. Is that normal?**
+
+Yes — Argon2id deliberately takes ~100–300 ms and allocates 64 MiB of RAM per call.
+In tests, use a low-cost config to avoid slow suites:
+
+```go
+pwd, _ := password.New(auth, password.Config{
+    Memory:      8 * 1024, // minimum allowed (8 MiB)
+    Iterations:  1,
+    Parallelism: 1,
+    DisablePolicy: true,
+})
+```
+
+---
+
 ## Roadmap
 
 - [x] Core library — key management, logger, clock, Provider interface
