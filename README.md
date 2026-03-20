@@ -429,7 +429,11 @@ authcore/
 │   └── password/        # Argon2id password hashing
 │
 └── examples/
-    └── basic/           # Runnable end-to-end example
+    ├── basic/           # authcore initialisation strategies
+    ├── jwt/             # JWT: create, verify, rotate
+    ├── password/        # Password: policy, hash, verify
+    ├── fiber/           # Full auth API with Fiber v3 (separate module)
+    └── gin/             # Full auth API with Gin (separate module)
 ```
 
 | Import path | Visibility | Purpose |
