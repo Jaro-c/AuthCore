@@ -37,7 +37,6 @@ go get github.com/Jaro-c/authcore
 - [Username Validation](#username-validation)
   - [Setup](#setup-3)
   - [Validating and normalizing](#validating-and-normalizing-1)
-  - [Extending the reserved names list](#extending-the-reserved-names-list)
 - [Key Management](#key-management)
 - [Configuration](#configuration)
 - [Custom Logger](#custom-logger)
@@ -57,7 +56,7 @@ go get github.com/Jaro-c/authcore
 - **Dual-token model** — short-lived access tokens + long-lived refresh tokens
 - **Argon2id password hashing** — memory-hard, GPU/ASIC-resistant, PHC format
 - **Email validation & normalization** — RFC 5321/5322 compliance, optional DNS MX verification with cache
-- **Username validation & normalization** — character rules, consecutive-special detection, reserved name blocklist
+- **Username validation & normalization** — character rules, consecutive-special detection, fixed reserved name blocklist
 - **Automatic key management** — generates, persists, and loads keys on first run
 - **Generic custom claims** — embed any struct in access tokens with full type safety
 - **Timing-safe comparisons** — `subtle.ConstantTimeCompare` throughout
@@ -460,28 +459,10 @@ Validation rules:
 | First character | Letter or digit (not `_` or `-`) |
 | Last character | Letter or digit (not `_` or `-`) |
 | Consecutive specials | `__`, `--`, `_-`, `-_` are rejected |
-| Reserved names | Built-in blocklist + optional `ExtraReserved` |
+| Reserved names | Built-in blocklist (fixed) |
 
 > **Always normalize before storing and before querying.** `Alice123` and `alice123`
 > are the same username — store only the canonical (normalized) form.
-
----
-
-### Extending the reserved names list
-
-The length limits (3–32) and character rules are fixed by the library and cannot be changed.
-The only application-specific option is `ExtraReserved` — names that are unique to your
-product and should not be allowed as usernames:
-
-```go
-userMod, err := username.New(auth, username.Config{
-    ExtraReserved: []string{"yourappname", "yourcompany"},
-})
-```
-
-The built-in reserved names list already covers `admin`, `root`, `api`, `system`, `null`,
-`bot`, common route names (`login`, `register`, `settings`, …), and more.
-`ExtraReserved` extends it — values are normalized (lowercased, trimmed) automatically.
 
 ---
 

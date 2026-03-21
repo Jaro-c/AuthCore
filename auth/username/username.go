@@ -1,11 +1,11 @@
 // Package username provides username validation and normalization for authcore.
 //
 // Validation rules (applied after normalization):
-//   - Length between [minLength] and [maxLength] (fixed: 3–32 characters)
+//   - Length between 3 and 32 characters (fixed)
 //   - Only lowercase letters, digits, underscores, and hyphens: [a-z0-9_-]
 //   - Must start and end with a letter or digit (not _ or -)
 //   - No consecutive special characters (__, --, _-, -_)
-//   - Not in the built-in reserved names list, nor in [Config.ExtraReserved]
+//   - Not in the built-in reserved names list
 //
 // The single entry point is [Username.ValidateAndNormalize] — it normalizes
 // (lowercase + trim) and validates in one step, returning the canonical form.
@@ -42,45 +42,23 @@ var _ authcore.Module = (*Username)(nil)
 // Construct one instance at application startup using New and share it
 // across goroutines. Username is safe for concurrent use after construction.
 type Username struct {
-	cfg      Config
 	log      authcore.Logger
 	reserved map[string]struct{} // O(1) lookup set built at New() time
 }
 
 // New creates a Username module using the provider's logger.
 //
-// cfg is optional — omit it for zero-config usage (built-in reserved names only).
-// Pass a Config only to add application-specific reserved names:
-//
-//	// zero-config — fixed rules, no boilerplate
 //	userMod, err := username.New(auth)
-//
-//	// extend the reserved names list with your product's own names
-//	userMod, err := username.New(auth, username.Config{
-//	    ExtraReserved: []string{"yourappname", "yourcompany"},
-//	})
-func New(p authcore.Provider, cfg ...Config) (*Username, error) {
-	// Accept an optional Config via variadic to allow zero-config usage:
-	//   username.New(auth)             — built-in reserved names only, no boilerplate
-	//   username.New(auth, customCfg)  — adds application-specific reserved names
-	var resolved Config
-	if len(cfg) > 0 {
-		resolved = cfg[0]
-	}
-
+//	if err != nil { log.Fatal(err) }
+func New(p authcore.Provider) (*Username, error) {
 	// Build the reserved names lookup set once at startup so every
 	// ValidateAndNormalize call gets O(1) map lookup instead of O(n) slice scan.
-	reserved := make(map[string]struct{}, len(defaultReservedNames)+len(resolved.ExtraReserved))
+	reserved := make(map[string]struct{}, len(defaultReservedNames))
 	for _, name := range defaultReservedNames {
 		reserved[name] = struct{}{}
 	}
-	for _, name := range resolved.ExtraReserved {
-		// Normalize extra reserved names so the comparison is case-insensitive
-		// and whitespace-tolerant regardless of how the caller provided them.
-		reserved[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
-	}
 
-	u := &Username{cfg: resolved, log: p.Logger(), reserved: reserved}
+	u := &Username{log: p.Logger(), reserved: reserved}
 	u.log.Info("username: module initialised (reserved=%d)", len(reserved))
 	return u, nil
 }

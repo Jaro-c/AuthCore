@@ -40,12 +40,6 @@ func TestNew_succeeds(t *testing.T) {
 	}
 }
 
-func TestNew_withExtraReserved_succeeds(t *testing.T) {
-	if _, err := New(fakeProvider{}, Config{ExtraReserved: []string{"myapp"}}); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-}
-
 func TestName(t *testing.T) {
 	if got := newMod(t).Name(); got != "username" {
 		t.Errorf("Name() = %q, want %q", got, "username")
@@ -93,9 +87,9 @@ func TestValidateAndNormalize_valid(t *testing.T) {
 		"alice-bob",
 		"alice_bob",
 		"a1b2c3",
-		"abc",                         // exactly minLength (3)
-		"a-b",                         // hyphen in middle
-		"a_b",                         // underscore in middle
+		"abc",                          // exactly minLength (3)
+		"a-b",                          // hyphen in middle
+		"a_b",                          // underscore in middle
 		"user123name",
 		strings.Repeat("a", maxLength), // exactly maxLength (32)
 	}
@@ -217,19 +211,6 @@ func TestValidateAndNormalize_reservedNameCaseInsensitive(t *testing.T) {
 	// "ADMIN" normalizes to "admin" which is reserved.
 	if _, err := m.ValidateAndNormalize("ADMIN"); !errors.Is(err, ErrInvalidUsername) {
 		t.Errorf("expected ErrInvalidUsername for reserved name 'ADMIN', got %v", err)
-	}
-}
-
-func TestValidateAndNormalize_extraReserved(t *testing.T) {
-	m, err := New(fakeProvider{}, Config{ExtraReserved: []string{"myapp", "MYAPP2"}})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	cases := []string{"myapp", "myapp2", "MYAPP", "  MyApp2  "}
-	for _, tc := range cases {
-		if _, err := m.ValidateAndNormalize(tc); !errors.Is(err, ErrInvalidUsername) {
-			t.Errorf("ValidateAndNormalize(%q): expected ErrInvalidUsername for extra reserved name, got %v", tc, err)
-		}
 	}
 }
 

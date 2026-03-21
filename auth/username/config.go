@@ -9,25 +9,6 @@ const (
 	maxLength = 32
 )
 
-// Config holds the username module configuration.
-//
-// Length limits (3–32) are fixed by the library and cannot be changed.
-// The only application-specific option is ExtraReserved — names that are
-// specific to your product and should not be allowed as usernames:
-//
-//	userMod, err := username.New(auth, username.Config{
-//	    ExtraReserved: []string{"yourappname", "yourcompany"},
-//	})
-type Config struct {
-	// ExtraReserved extends the built-in reserved names list with your own
-	// application-specific names. Values are lowercased automatically.
-	//
-	// The built-in list already covers common names like "admin", "root",
-	// "api", "system", "null", "bot", etc. Use ExtraReserved to add names
-	// specific to your product (e.g. your brand name, feature names).
-	ExtraReserved []string
-}
-
 // defaultReservedNames is the built-in set of names that cannot be registered.
 // These cover infrastructure roles, common attack targets, and names that would
 // confuse users into believing they are interacting with the service itself.
