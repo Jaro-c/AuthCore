@@ -52,19 +52,19 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/Jaro-c/authcore"
 )
-
 
 // DefaultCacheTTL is the maximum duration a domain MX lookup result is cached.
 // Tune this value if your workload has strict freshness requirements.
 const DefaultCacheTTL = 5 * time.Minute
 
 // maxCacheSize is the maximum number of domains held in the cache at once.
-// When the limit is reached, expired entries are evicted before writing a new
-// one. If the cache is still full after eviction, the new result is not cached
-// (the next lookup will query DNS again). This bounds memory use even under
-// an attack that submits millions of unique domains.
+// If the cache is full when a new result arrives, it is silently dropped —
+// the next request will query DNS again. Background eviction keeps the cache
+// below this limit under normal operation.
 const maxCacheSize = 10_000
 
 // cacheEntry holds the result of a single MX lookup.
@@ -76,25 +76,73 @@ type cacheEntry struct {
 
 // Email is the email validation and normalization module.
 // Create one instance at startup via New and reuse it — it is safe for
-// concurrent use.
+// concurrent use after construction.
+//
+// Call [Email.Close] when the module is no longer needed to stop the
+// background cache eviction goroutine.
 type Email struct {
 	log      authcore.Logger
 	resolver *net.Resolver
 	cacheTTL time.Duration
 	mu       sync.RWMutex
 	cache    map[string]cacheEntry
+	group    singleflight.Group
+	done     chan struct{}
 }
 
-// New creates an Email module using the provider's logger.
+// New creates an Email module using the provider's logger and starts a
+// background goroutine that evicts expired cache entries.
+// Call [Email.Close] to stop it when the module is no longer needed.
 func New(p authcore.Provider) (*Email, error) {
 	e := &Email{
 		log:      p.Logger(),
 		resolver: net.DefaultResolver,
 		cacheTTL: DefaultCacheTTL,
 		cache:    make(map[string]cacheEntry),
+		done:     make(chan struct{}),
 	}
+	go e.evictLoop()
 	e.log.Info("email: module initialised")
 	return e, nil
+}
+
+// Close stops the background cache eviction goroutine.
+// It is safe to call Close multiple times; subsequent calls are no-ops.
+// After Close, VerifyDomain continues to work but expired entries are no
+// longer evicted automatically.
+func (e *Email) Close() {
+	select {
+	case <-e.done: // already closed
+	default:
+		close(e.done)
+	}
+}
+
+// evictLoop runs in a background goroutine and periodically removes expired
+// cache entries. This keeps memory bounded without touching the hot path.
+func (e *Email) evictLoop() {
+	ticker := time.NewTicker(e.cacheTTL / 2)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			e.evictExpired()
+		case <-e.done:
+			return
+		}
+	}
+}
+
+// evictExpired deletes all expired entries from the cache.
+func (e *Email) evictExpired() {
+	now := time.Now()
+	e.mu.Lock()
+	for k, v := range e.cache {
+		if now.After(v.expiresAt) {
+			delete(e.cache, k)
+		}
+	}
+	e.mu.Unlock()
 }
 
 // Name implements authcore.Module.
@@ -222,60 +270,63 @@ func (e *Email) VerifyDomain(ctx context.Context, address string) error {
 		return ErrDomainNoMX
 	}
 
-	// Fast path: check cache under read lock.
+	// Fast path: valid cache hit.
+	if entry, ok := e.cached(domain); ok {
+		return entryErr(entry)
+	}
+
+	// Slow path: deduplicated DNS lookup.
+	// singleflight.Group ensures that N concurrent callers for the same domain
+	// fire exactly one DNS query; all share the result. This prevents thundering
+	// herd when a cache entry expires under high concurrency.
+	//
+	// Note: the ctx used is the one from the call that triggers the lookup.
+	// Other callers sharing the result are not affected by their own contexts
+	// while waiting — this is a known singleflight trade-off.
+	v, dnsErr, _ := e.group.Do(domain, func() (any, error) {
+		mxs, err := e.resolver.LookupMX(ctx, domain)
+		if err != nil {
+			e.store(domain, cacheEntry{dnsFailure: true, expiresAt: time.Now().Add(30 * time.Second)})
+			return nil, &domainUnresolvable{cause: err}
+		}
+		entry := cacheEntry{hasMX: len(mxs) > 0, expiresAt: time.Now().Add(e.cacheTTL)}
+		e.store(domain, entry)
+		return entry, nil
+	})
+	if dnsErr != nil {
+		return dnsErr
+	}
+	return entryErr(v.(cacheEntry))
+}
+
+// cached returns the cache entry for domain if it exists and has not expired.
+func (e *Email) cached(domain string) (cacheEntry, bool) {
 	e.mu.RLock()
 	entry, ok := e.cache[domain]
 	e.mu.RUnlock()
-	if ok && time.Now().Before(entry.expiresAt) {
-		if entry.dnsFailure {
-			return ErrDomainUnresolvable
-		}
-		if !entry.hasMX {
-			return ErrDomainNoMX
-		}
-		return nil
-	}
-
-	// Slow path: DNS lookup.
-	mxs, err := e.resolver.LookupMX(ctx, domain)
-	if err != nil {
-		// Cache the DNS failure briefly (30 s) so a burst of requests for the
-		// same unreachable domain does not hammer the resolver.
-		// dnsFailure=true ensures subsequent cache hits return ErrDomainUnresolvable,
-		// not ErrDomainNoMX, so callers never incorrectly block the user.
-		e.store(domain, cacheEntry{dnsFailure: true, expiresAt: time.Now().Add(30 * time.Second)})
-		return &domainUnresolvable{cause: err}
-	}
-
-	hasMX := len(mxs) > 0
-	e.store(domain, cacheEntry{hasMX: hasMX, expiresAt: time.Now().Add(e.cacheTTL)})
-
-	if !hasMX {
-		return ErrDomainNoMX
-	}
-	return nil
+	return entry, ok && time.Now().Before(entry.expiresAt)
 }
 
 // store writes entry into the cache under write lock.
-// If the cache is at maxCacheSize, expired entries are evicted first.
-// If still full after eviction, the entry is silently dropped — the next
-// lookup will query DNS again, which is safe.
+// If the cache is at maxCacheSize the entry is silently dropped —
+// background eviction will free space and the next lookup retries DNS.
 func (e *Email) store(domain string, entry cacheEntry) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if len(e.cache) >= maxCacheSize {
-		now := time.Now()
-		for k, v := range e.cache {
-			if now.After(v.expiresAt) {
-				delete(e.cache, k)
-			}
-		}
-		if len(e.cache) >= maxCacheSize {
-			return // still full — skip caching this entry
-		}
+	if len(e.cache) < maxCacheSize {
+		e.cache[domain] = entry
 	}
-	e.cache[domain] = entry
+	e.mu.Unlock()
+}
+
+// entryErr converts a cache entry into the appropriate sentinel error.
+func entryErr(entry cacheEntry) error {
+	if entry.dnsFailure {
+		return ErrDomainUnresolvable
+	}
+	if !entry.hasMX {
+		return ErrDomainNoMX
+	}
+	return nil
 }
 
 // domainOf extracts the domain part of a normalized email address.

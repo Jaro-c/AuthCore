@@ -304,33 +304,57 @@ func TestVerifyDomain_cachedDnsFailureReturnsErrDomainUnresolvable(t *testing.T)
 	}
 }
 
-func TestVerifyDomain_cacheEvictsExpiredWhenFull(t *testing.T) {
+func TestVerifyDomain_cacheDropsEntryWhenFull(t *testing.T) {
 	m := newMod(t)
 
-	// Fill the cache to maxCacheSize with already-expired entries.
+	// Fill the cache to maxCacheSize with live entries.
 	m.mu.Lock()
 	for i := range maxCacheSize {
-		m.cache[fmt.Sprintf("expired%d.example", i)] = cacheEntry{
+		m.cache[fmt.Sprintf("live%d.example", i)] = cacheEntry{
 			hasMX:     true,
-			expiresAt: time.Now().Add(-time.Second), // already expired
+			expiresAt: time.Now().Add(time.Hour),
 		}
 	}
 	m.mu.Unlock()
 
-	// Storing a new entry must evict the expired ones and succeed.
+	// Storing a new entry must be silently dropped when cache is full.
 	m.store("new.example", cacheEntry{hasMX: true, expiresAt: time.Now().Add(time.Minute)})
 
 	m.mu.RLock()
 	_, ok := m.cache["new.example"]
-	size := len(m.cache)
 	m.mu.RUnlock()
 
-	if !ok {
-		t.Error("new entry must be stored after expired entries are evicted")
+	if ok {
+		t.Error("store must drop new entries silently when cache is at maxCacheSize")
 	}
-	if size > maxCacheSize {
-		t.Errorf("cache size %d exceeds maxCacheSize %d", size, maxCacheSize)
+}
+
+func TestEvictExpired_removesStaleKeepsLive(t *testing.T) {
+	m := newMod(t)
+	m.mu.Lock()
+	m.cache["stale.example"] = cacheEntry{hasMX: true, expiresAt: time.Now().Add(-time.Second)}
+	m.cache["live.example"] = cacheEntry{hasMX: true, expiresAt: time.Now().Add(time.Minute)}
+	m.mu.Unlock()
+
+	m.evictExpired()
+
+	m.mu.RLock()
+	_, staleOk := m.cache["stale.example"]
+	_, liveOk := m.cache["live.example"]
+	m.mu.RUnlock()
+
+	if staleOk {
+		t.Error("evictExpired must remove stale entries")
 	}
+	if !liveOk {
+		t.Error("evictExpired must keep live entries")
+	}
+}
+
+func TestClose_isIdempotent(t *testing.T) {
+	m := newMod(t)
+	m.Close()
+	m.Close() // must not panic
 }
 
 func TestVerifyDomain_dnsFailureCachesNegativeBriefly(t *testing.T) {
