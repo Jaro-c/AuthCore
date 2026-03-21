@@ -34,6 +34,10 @@ go get github.com/Jaro-c/authcore
   - [Setup](#setup-2)
   - [Validating and normalizing](#validating-and-normalizing)
   - [Verifying a domain can receive email](#verifying-a-domain-can-receive-email)
+- [Username Validation](#username-validation)
+  - [Setup](#setup-3)
+  - [Validating and normalizing](#validating-and-normalizing-1)
+  - [Extending the reserved names list](#extending-the-reserved-names-list)
 - [Key Management](#key-management)
 - [Configuration](#configuration)
 - [Custom Logger](#custom-logger)
@@ -53,6 +57,7 @@ go get github.com/Jaro-c/authcore
 - **Dual-token model** — short-lived access tokens + long-lived refresh tokens
 - **Argon2id password hashing** — memory-hard, GPU/ASIC-resistant, PHC format
 - **Email validation & normalization** — RFC 5321/5322 compliance, optional DNS MX verification with cache
+- **Username validation & normalization** — character rules, consecutive-special detection, reserved name blocklist
 - **Automatic key management** — generates, persists, and loads keys on first run
 - **Generic custom claims** — embed any struct in access tokens with full type safety
 - **Timing-safe comparisons** — `subtle.ConstantTimeCompare` throughout
@@ -418,6 +423,68 @@ case errors.Is(err, email.ErrDomainUnresolvable):
 
 ---
 
+## Username Validation
+
+### Setup
+
+```go
+userMod, err := username.New(auth)
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+---
+
+### Validating and normalizing
+
+Always call `ValidateAndNormalize` — it lowercases, trims whitespace, and validates in a
+single call, ensuring the value you store is always in canonical form:
+
+```go
+normalized, err := userMod.ValidateAndNormalize(req.Username)
+if err != nil {
+    // errors.Unwrap(err).Error() contains the specific rule that failed.
+    c.JSON(400, map[string]string{"error": errors.Unwrap(err).Error()})
+    return
+}
+db.StoreUser(normalized, ...) // always lowercase, trimmed, validated
+```
+
+Validation rules:
+
+| Rule | Requirement |
+|---|---|
+| Length | 3 – 32 characters (fixed) |
+| Allowed characters | `[a-z0-9_-]` only |
+| First character | Letter or digit (not `_` or `-`) |
+| Last character | Letter or digit (not `_` or `-`) |
+| Consecutive specials | `__`, `--`, `_-`, `-_` are rejected |
+| Reserved names | Built-in blocklist + optional `ExtraReserved` |
+
+> **Always normalize before storing and before querying.** `Alice123` and `alice123`
+> are the same username — store only the canonical (normalized) form.
+
+---
+
+### Extending the reserved names list
+
+The length limits (3–32) and character rules are fixed by the library and cannot be changed.
+The only application-specific option is `ExtraReserved` — names that are unique to your
+product and should not be allowed as usernames:
+
+```go
+userMod, err := username.New(auth, username.Config{
+    ExtraReserved: []string{"yourappname", "yourcompany"},
+})
+```
+
+The built-in reserved names list already covers `admin`, `root`, `api`, `system`, `null`,
+`bot`, common route names (`login`, `register`, `settings`, …), and more.
+`ExtraReserved` extends it — values are normalized (lowercased, trimmed) automatically.
+
+---
+
 ## Key Management
 
 On first run authcore creates `KeysDir` (default `.authcore`) and generates:
@@ -512,7 +579,8 @@ authcore/
 ├── auth/
 │   ├── jwt/             # JSON Web Token authentication (EdDSA / Ed25519)
 │   ├── password/        # Argon2id password hashing
-│   └── email/           # Email validation, normalization, DNS MX verification
+│   ├── email/           # Email validation, normalization, DNS MX verification
+│   └── username/        # Username validation, normalization, reserved name blocklist
 │
 └── examples/
     ├── basic/           # authcore initialisation strategies
@@ -530,6 +598,7 @@ authcore/
 | `…/auth/jwt` | public | JWT module |
 | `…/auth/password` | public | Argon2id password hashing module |
 | `…/auth/email` | public | Email validation, normalization, MX verification |
+| `…/auth/username` | public | Username validation, normalization, reserved names |
 | `…/internal/clock` | internal | Shared time abstraction |
 | `…/internal/keymanager` | internal | Key generation and persistence |
 
@@ -614,6 +683,13 @@ In tests, inject a stub `Provider` that returns fixed keys — no disk I/O requi
 | `email.ErrDomainNoMX` | ✓ Yes | Domain exists but has no MX records (cannot receive email) |
 | `email.ErrDomainUnresolvable` | ✗ No | DNS lookup failed; treat as soft failure, do not block the user |
 
+### auth/username package
+
+| Error | Client-safe? | When |
+|---|---|---|
+| `username.ErrInvalidUsername` | ✓ Yes | Username fails a validation rule; `errors.Unwrap` gives the specific rule |
+| `username.ErrInvalidConfig` | ✗ No | `username.Config` validation failed (startup error, treat as 500) |
+
 Always use `errors.Is` for error inspection — errors may be wrapped:
 
 ```go
@@ -688,6 +764,7 @@ pwd, _ := password.New(auth, password.Config{
 - [x] `auth/jwt` — EdDSA token issuance, verification, rotation, timing-safe hash
 - [x] `auth/password` — Argon2id password hashing with PHC format
 - [x] `auth/email` — RFC 5321/5322 validation, normalization, DNS MX verification with cache
+- [x] `auth/username` — validation, normalization, reserved name blocklist, configurable length limits
 - [ ] `auth/apikey` — opaque key generation with pluggable store interface *(future)*
 - [ ] `auth/oauth` — OAuth 2.0 / OIDC provider integration *(future)*
 - [ ] Key rotation helpers — zero-downtime rotation via `kid` header *(future)*
