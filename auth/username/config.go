@@ -20,7 +20,7 @@ var defaultReservedNames = []string{
 	// Protocol and server names
 	"www", "ftp", "smtp", "pop", "imap", "mail", "email",
 	// Common anonymous / placeholder identities
-	"anonymous", "guest", "user", "me", "self",
+	"anonymous", "guest", "user", "self",
 	// UI / navigation routes that would clash with URL paths
 	"login", "logout", "register", "signup", "signin", "signout",
 	"settings", "profile", "account", "dashboard", "home",
