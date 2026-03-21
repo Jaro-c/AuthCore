@@ -7,10 +7,12 @@
 //   - Domain contains at least one dot; no leading, trailing, or consecutive dots
 //   - Each domain label is 1–63 characters
 //
-// Normalization lowercases and trims surrounding whitespace. Always normalize
-// before storing and before querying — this ensures consistent lookup:
+// The single entry point is [Email.ValidateAndNormalize] — it normalizes
+// (lowercase + trim) and validates in one step, returning the canonical form.
+// Always store and query emails using this canonical form:
 //
 //	emailMod, _ := email.New(auth)
+//	defer emailMod.Close()
 //
 //	// Registration
 //	normalized, err := emailMod.ValidateAndNormalize(req.Email)
@@ -20,8 +22,8 @@
 //	}
 //	db.StoreUser(normalized, ...)
 //
-//	// Login lookup
-//	normalized, err := emailMod.ValidateAndNormalize(req.Email)
+//	// Login lookup — same call, same canonical form, consistent results
+//	normalized, err = emailMod.ValidateAndNormalize(req.Email)
 //	if err != nil { ... }
 //	user := db.FindByEmail(normalized)
 //
@@ -155,38 +157,35 @@ func (e *Email) evictExpired() {
 // Name implements authcore.Module.
 func (e *Email) Name() string { return "email" }
 
-// Normalize lowercases and trims surrounding whitespace from address.
-// It does not validate — call Validate or ValidateAndNormalize for that.
-func (e *Email) Normalize(address string) string {
-	return strings.ToLower(strings.TrimSpace(address))
-}
-
-// Validate reports whether address is a well-formed email address.
-// The address is expected to already be normalized (call Normalize first,
-// or use ValidateAndNormalize to do both in one step).
+// ValidateAndNormalize is the single entry point for email validation.
+// It lowercases, trims surrounding whitespace, and validates the address
+// against RFC 5321 / RFC 5322 rules in one atomic step.
 //
-// Returns nil on success, or [ErrInvalidEmail] wrapping the specific rule
-// that failed. The wrapped reason is safe to show to the user.
-func (e *Email) Validate(address string) error {
-	return validate(address)
-}
-
-// ValidateAndNormalize normalizes address (lowercase + trim) and then
-// validates it. Returns the normalized address on success.
-//
-// This is the recommended entry point for HTTP handlers:
+// Always use this function — never normalize and validate separately.
+// The returned string is the canonical form that must be stored and queried:
 //
 //	normalized, err := emailMod.ValidateAndNormalize(req.Email)
 //	if err != nil {
+//	    // errors.Unwrap(err).Error() contains the specific rule that failed.
 //	    c.JSON(400, map[string]string{"error": errors.Unwrap(err).Error()})
 //	    return
 //	}
+//	db.StoreUser(normalized, ...) // always lowercase, trimmed, validated
 func (e *Email) ValidateAndNormalize(address string) (string, error) {
-	normalized := e.Normalize(address)
+	// Normalize first so validation sees the canonical form.
+	// Storing the normalized form ensures consistent lookups:
+	// "USER@EXAMPLE.COM" and "user@example.com" resolve to the same record.
+	normalized := normalize(address)
 	if err := validate(normalized); err != nil {
 		return "", err
 	}
 	return normalized, nil
+}
+
+// normalize lowercases and trims surrounding whitespace. Internal only —
+// callers outside this package must use ValidateAndNormalize.
+func normalize(address string) string {
+	return strings.ToLower(strings.TrimSpace(address))
 }
 
 // validate checks address against RFC 5321 / RFC 5322 rules.

@@ -49,30 +49,27 @@ func TestName(t *testing.T) {
 	}
 }
 
-// ---- Normalize() ------------------------------------------------------------
+// ---- normalize() — internal -------------------------------------------------
 
 func TestNormalize_lowercases(t *testing.T) {
-	m := newMod(t)
-	if got := m.Normalize("USER@EXAMPLE.COM"); got != "user@example.com" {
+	if got := normalize("USER@EXAMPLE.COM"); got != "user@example.com" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestNormalize_trimsSpaces(t *testing.T) {
-	m := newMod(t)
-	if got := m.Normalize("  user@example.com  "); got != "user@example.com" {
+	if got := normalize("  user@example.com  "); got != "user@example.com" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestNormalize_mixedCaseAndSpaces(t *testing.T) {
-	m := newMod(t)
-	if got := m.Normalize("  Ana@Example.COM  "); got != "ana@example.com" {
+	if got := normalize("  Ana@Example.COM  "); got != "ana@example.com" {
 		t.Errorf("got %q", got)
 	}
 }
 
-// ---- Validate() — valid addresses -------------------------------------------
+// ---- validate() — valid addresses (internal) --------------------------------
 
 func TestValidate_simpleValid(t *testing.T) {
 	valid := []string{
@@ -82,35 +79,33 @@ func TestValidate_simpleValid(t *testing.T) {
 		"a@b.io",
 		"user@sub.domain.example.com",
 	}
-	m := newMod(t)
 	for _, addr := range valid {
-		if err := m.Validate(addr); err != nil {
-			t.Errorf("Validate(%q) = %v, want nil", addr, err)
+		if err := validate(addr); err != nil {
+			t.Errorf("validate(%q) = %v, want nil", addr, err)
 		}
 	}
 }
 
-// ---- Validate() — invalid addresses -----------------------------------------
+// ---- validate() — invalid addresses (internal) ------------------------------
 
 func TestValidate_empty(t *testing.T) {
-	if err := newMod(t).Validate(""); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate(""); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail, got %v", err)
 	}
 }
 
 func TestValidate_tooLong(t *testing.T) {
-	// 255-character address
 	local := "a"
 	for len(local+"@b.com") <= 254 {
 		local += "a"
 	}
-	if err := newMod(t).Validate(local + "@b.com"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate(local + "@b.com"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail for too-long address")
 	}
 }
 
 func TestValidate_noAt(t *testing.T) {
-	if err := newMod(t).Validate("userexample.com"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate("userexample.com"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail, got %v", err)
 	}
 }
@@ -120,45 +115,45 @@ func TestValidate_localPartTooLong(t *testing.T) {
 	for i := 0; i < 65; i++ {
 		local += "a"
 	}
-	if err := newMod(t).Validate(local + "@example.com"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate(local + "@example.com"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail for local part > 64 chars")
 	}
 }
 
 func TestValidate_domainNoDot(t *testing.T) {
-	if err := newMod(t).Validate("user@localhost"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate("user@localhost"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail, got %v", err)
 	}
 }
 
 func TestValidate_domainLeadingDot(t *testing.T) {
-	if err := newMod(t).Validate("user@.example.com"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate("user@.example.com"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail, got %v", err)
 	}
 }
 
 func TestValidate_domainTrailingDot(t *testing.T) {
-	if err := newMod(t).Validate("user@example.com."); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate("user@example.com."); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail, got %v", err)
 	}
 }
 
 func TestValidate_domainConsecutiveDots(t *testing.T) {
-	if err := newMod(t).Validate("user@example..com"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate("user@example..com"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail, got %v", err)
 	}
 }
 
 func TestValidate_withDisplayName(t *testing.T) {
-	if err := newMod(t).Validate("Ana <ana@example.com>"); !errors.Is(err, ErrInvalidEmail) {
+	if err := validate("Ana <ana@example.com>"); !errors.Is(err, ErrInvalidEmail) {
 		t.Errorf("expected ErrInvalidEmail for display name format")
 	}
 }
 
-// ---- Validate() — ErrInvalidEmail wraps a reason ---------------------------
+// ---- ErrInvalidEmail wraps a reason -----------------------------------------
 
 func TestValidate_wrapsReason(t *testing.T) {
-	err := newMod(t).Validate("")
+	err := validate("")
 	if !errors.Is(err, ErrInvalidEmail) {
 		t.Fatalf("expected ErrInvalidEmail, got %v", err)
 	}
