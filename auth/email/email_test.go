@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -279,6 +280,56 @@ func TestVerifyDomain_noAtSignReturnsErrDomainNoMX(t *testing.T) {
 	err := m.VerifyDomain(context.Background(), "notanemail")
 	if !errors.Is(err, ErrDomainNoMX) {
 		t.Errorf("expected ErrDomainNoMX for address with no '@', got %v", err)
+	}
+}
+
+func TestVerifyDomain_cachedDnsFailureReturnsErrDomainUnresolvable(t *testing.T) {
+	// Regression: a DNS failure cached as hasMX=false must NOT return
+	// ErrDomainNoMX on subsequent cache hits — that would incorrectly block
+	// the user. It must return ErrDomainUnresolvable (soft failure).
+	m := newMod(t)
+	m.mu.Lock()
+	m.cache["unreachable.example"] = cacheEntry{
+		dnsFailure: true,
+		expiresAt:  time.Now().Add(time.Minute),
+	}
+	m.mu.Unlock()
+
+	err := m.VerifyDomain(context.Background(), "user@unreachable.example")
+	if !errors.Is(err, ErrDomainUnresolvable) {
+		t.Errorf("cached DNS failure must return ErrDomainUnresolvable, got %v", err)
+	}
+	if errors.Is(err, ErrDomainNoMX) {
+		t.Error("cached DNS failure must NOT return ErrDomainNoMX")
+	}
+}
+
+func TestVerifyDomain_cacheEvictsExpiredWhenFull(t *testing.T) {
+	m := newMod(t)
+
+	// Fill the cache to maxCacheSize with already-expired entries.
+	m.mu.Lock()
+	for i := range maxCacheSize {
+		m.cache[fmt.Sprintf("expired%d.example", i)] = cacheEntry{
+			hasMX:     true,
+			expiresAt: time.Now().Add(-time.Second), // already expired
+		}
+	}
+	m.mu.Unlock()
+
+	// Storing a new entry must evict the expired ones and succeed.
+	m.store("new.example", cacheEntry{hasMX: true, expiresAt: time.Now().Add(time.Minute)})
+
+	m.mu.RLock()
+	_, ok := m.cache["new.example"]
+	size := len(m.cache)
+	m.mu.RUnlock()
+
+	if !ok {
+		t.Error("new entry must be stored after expired entries are evicted")
+	}
+	if size > maxCacheSize {
+		t.Errorf("cache size %d exceeds maxCacheSize %d", size, maxCacheSize)
 	}
 }
 

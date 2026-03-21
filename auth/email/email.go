@@ -57,14 +57,21 @@ import (
 
 
 // DefaultCacheTTL is the maximum duration a domain MX lookup result is cached.
-// Individual DNS responses with a shorter TTL are evicted earlier.
 // Tune this value if your workload has strict freshness requirements.
 const DefaultCacheTTL = 5 * time.Minute
 
+// maxCacheSize is the maximum number of domains held in the cache at once.
+// When the limit is reached, expired entries are evicted before writing a new
+// one. If the cache is still full after eviction, the new result is not cached
+// (the next lookup will query DNS again). This bounds memory use even under
+// an attack that submits millions of unique domains.
+const maxCacheSize = 10_000
+
 // cacheEntry holds the result of a single MX lookup.
 type cacheEntry struct {
-	hasMX     bool
-	expiresAt time.Time
+	hasMX      bool
+	dnsFailure bool // true = DNS error, false = confirmed result
+	expiresAt  time.Time
 }
 
 // Email is the email validation and normalization module.
@@ -220,6 +227,9 @@ func (e *Email) VerifyDomain(ctx context.Context, address string) error {
 	entry, ok := e.cache[domain]
 	e.mu.RUnlock()
 	if ok && time.Now().Before(entry.expiresAt) {
+		if entry.dnsFailure {
+			return ErrDomainUnresolvable
+		}
 		if !entry.hasMX {
 			return ErrDomainNoMX
 		}
@@ -229,14 +239,16 @@ func (e *Email) VerifyDomain(ctx context.Context, address string) error {
 	// Slow path: DNS lookup.
 	mxs, err := e.resolver.LookupMX(ctx, domain)
 	if err != nil {
-		// Cache negative result briefly (30 s) so a burst of registrations
-		// with the same bad domain doesn't hammer the resolver.
-		e.store(domain, false, 30*time.Second)
+		// Cache the DNS failure briefly (30 s) so a burst of requests for the
+		// same unreachable domain does not hammer the resolver.
+		// dnsFailure=true ensures subsequent cache hits return ErrDomainUnresolvable,
+		// not ErrDomainNoMX, so callers never incorrectly block the user.
+		e.store(domain, cacheEntry{dnsFailure: true, expiresAt: time.Now().Add(30 * time.Second)})
 		return &domainUnresolvable{cause: err}
 	}
 
 	hasMX := len(mxs) > 0
-	e.store(domain, hasMX, e.cacheTTL)
+	e.store(domain, cacheEntry{hasMX: hasMX, expiresAt: time.Now().Add(e.cacheTTL)})
 
 	if !hasMX {
 		return ErrDomainNoMX
@@ -244,14 +256,26 @@ func (e *Email) VerifyDomain(ctx context.Context, address string) error {
 	return nil
 }
 
-// store writes a cache entry under write lock, capping the TTL at cacheTTL.
-func (e *Email) store(domain string, hasMX bool, ttl time.Duration) {
-	if ttl > e.cacheTTL {
-		ttl = e.cacheTTL
-	}
+// store writes entry into the cache under write lock.
+// If the cache is at maxCacheSize, expired entries are evicted first.
+// If still full after eviction, the entry is silently dropped — the next
+// lookup will query DNS again, which is safe.
+func (e *Email) store(domain string, entry cacheEntry) {
 	e.mu.Lock()
-	e.cache[domain] = cacheEntry{hasMX: hasMX, expiresAt: time.Now().Add(ttl)}
-	e.mu.Unlock()
+	defer e.mu.Unlock()
+
+	if len(e.cache) >= maxCacheSize {
+		now := time.Now()
+		for k, v := range e.cache {
+			if now.After(v.expiresAt) {
+				delete(e.cache, k)
+			}
+		}
+		if len(e.cache) >= maxCacheSize {
+			return // still full — skip caching this entry
+		}
+	}
+	e.cache[domain] = entry
 }
 
 // domainOf extracts the domain part of a normalized email address.
