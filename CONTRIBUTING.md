@@ -28,7 +28,13 @@ Follow the process in our [Security Policy](SECURITY.md) instead.
 
 ### Pull Requests
 
-1. **Fork** the repository and branch from `main`.
+> **Branch model.** `main` only ever contains released code — what you see on
+> [pkg.go.dev](https://pkg.go.dev/github.com/Jaro-c/authcore). All work lands on
+> `develop` first and is promoted to `main` together with a release tag. Always
+> branch from `develop` and target `develop` in your PR. Pull requests against
+> `main` will be redirected.
+
+1. **Fork** the repository and branch from `develop` (not `main`).
 2. **Run `go mod download`** to fetch dependencies.
 3. **Write tests.** Every change must include tests. Security-critical paths need
    table-driven tests that cover both the happy path and all error cases.
@@ -64,6 +70,7 @@ golangci-lint run
 
 1. Ensure all CI checks pass (tests + lint).
 2. A maintainer will review within a few days.
-3. Once approved it will be squash-merged into `main`.
+3. Once approved it will be squash-merged into `develop`. The maintainer
+   later promotes `develop` to `main` together with a release tag.
 
 Thank you for your contribution!

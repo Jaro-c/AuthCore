@@ -41,12 +41,12 @@ func main() {
 	fmt.Println("=== ValidateAndNormalize ===")
 
 	cases := []string{
-		"  USER@EXAMPLE.COM  ", // valid — normalized to lowercase + trimmed
+		"  USER@EXAMPLE.COM  ",            // valid — normalized to lowercase + trimmed
 		"user.name+tag@sub.example.co.uk", // valid — complex but correct
-		"",                    // invalid — empty
-		"notanemail",          // invalid — no @
-		"user@localhost",      // invalid — domain has no dot
-		"user@example..com",   // invalid — consecutive dots
+		"",                                // invalid — empty
+		"notanemail",                      // invalid — no @
+		"user@localhost",                  // invalid — domain has no dot
+		"user@example..com",               // invalid — consecutive dots
 	}
 
 	for _, raw := range cases {
@@ -104,5 +104,5 @@ func tempDir() (string, func()) {
 	if err != nil {
 		log.Fatalf("create temp dir: %v", err)
 	}
-	return dir, func() { os.RemoveAll(dir) }
+	return dir, func() { _ = os.RemoveAll(dir) }
 }

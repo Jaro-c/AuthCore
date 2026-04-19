@@ -8,7 +8,6 @@ import (
 	"github.com/Jaro-c/authcore"
 )
 
-
 // ---- test infrastructure ----------------------------------------------------
 
 // fakeProvider satisfies authcore.Provider with a silent logger and no keys.
@@ -258,7 +257,6 @@ func TestHash_strongPasswordSucceeds(t *testing.T) {
 		t.Errorf("Hash(strong password) error = %v, want nil", err)
 	}
 }
-
 
 // ---- checkPolicy() ----------------------------------------------------------
 

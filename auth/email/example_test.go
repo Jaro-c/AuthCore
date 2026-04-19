@@ -13,7 +13,7 @@ import (
 
 func ExampleNew() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, err := email.New(auth)
@@ -27,7 +27,7 @@ func ExampleNew() {
 
 func ExampleEmail_ValidateAndNormalize() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := email.New(auth)
@@ -44,7 +44,7 @@ func ExampleEmail_ValidateAndNormalize() {
 
 func ExampleEmail_VerifyDomain() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := email.New(auth)

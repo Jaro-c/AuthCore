@@ -40,7 +40,7 @@ type Keys interface {
 //  2. Stability — if AuthCore gains new methods in a future release, existing
 //     module code is unaffected because it only depends on the methods below.
 //
-// Guaranteed implementation: *AuthCore
+// Guaranteed implementation: *AuthCore.
 type Provider interface {
 	// Config returns a copy of the active library configuration.
 	Config() Config

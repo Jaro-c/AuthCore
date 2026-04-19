@@ -170,10 +170,10 @@ func TestCreateTokens_invalidSubjectReturnsError(t *testing.T) {
 		"123",
 		"0191b432-b5a7-7c4f-b2e6",               // too short
 		"0191b432-b5a7-7c4f-b2e6-7a3f1d2e00001", // too long
-		"550e8400-e29b-11d4-a716-446655440000",   // v1 — rejected
-		"550e8400-e29b-31d4-a716-446655440000",   // v3 — rejected
-		"550e8400-e29b-41d4-a716-446655440000",   // v4 — rejected
-		"550e8400-e29b-61d4-a716-446655440000",   // v6 — rejected
+		"550e8400-e29b-11d4-a716-446655440000",  // v1 — rejected
+		"550e8400-e29b-31d4-a716-446655440000",  // v3 — rejected
+		"550e8400-e29b-41d4-a716-446655440000",  // v4 — rejected
+		"550e8400-e29b-61d4-a716-446655440000",  // v6 — rejected
 	}
 	for _, tc := range cases {
 		_, err := j.CreateTokens(tc, struct{}{})

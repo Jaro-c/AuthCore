@@ -86,7 +86,7 @@ func tempDir() (string, func()) {
 	if err != nil {
 		log.Fatalf("create temp dir: %v", err)
 	}
-	return dir, func() { os.RemoveAll(dir) }
+	return dir, func() { _ = os.RemoveAll(dir) }
 }
 
 // myAppLogger is a toy implementation of authcore.Logger.

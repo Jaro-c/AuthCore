@@ -232,7 +232,7 @@ func TestKeyID_is16HexCharacters(t *testing.T) {
 		t.Fatalf("KeyID() length = %d, want 16", len(id))
 	}
 	for _, c := range id {
-		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("KeyID() contains non-hex character %q", c)
 		}
 	}

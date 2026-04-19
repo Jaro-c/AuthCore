@@ -49,10 +49,10 @@ func newStdLogger(w io.Writer) *stdLogger {
 	}
 }
 
-func (l *stdLogger) Debug(msg string, args ...any) { l.debug.Output(2, fmt.Sprintf(msg, args...)) } //nolint:errcheck
-func (l *stdLogger) Info(msg string, args ...any)  { l.info.Output(2, fmt.Sprintf(msg, args...)) }  //nolint:errcheck
-func (l *stdLogger) Warn(msg string, args ...any)  { l.warn.Output(2, fmt.Sprintf(msg, args...)) }  //nolint:errcheck
-func (l *stdLogger) Error(msg string, args ...any) { l.err.Output(2, fmt.Sprintf(msg, args...)) }   //nolint:errcheck
+func (l *stdLogger) Debug(msg string, args ...any) { l.debug.Output(2, fmt.Sprintf(msg, args...)) } //nolint:errcheck,gosec
+func (l *stdLogger) Info(msg string, args ...any)  { l.info.Output(2, fmt.Sprintf(msg, args...)) }  //nolint:errcheck,gosec
+func (l *stdLogger) Warn(msg string, args ...any)  { l.warn.Output(2, fmt.Sprintf(msg, args...)) }  //nolint:errcheck,gosec
+func (l *stdLogger) Error(msg string, args ...any) { l.err.Output(2, fmt.Sprintf(msg, args...)) }   //nolint:errcheck,gosec
 
 // newLogger selects the right Logger implementation based on the config.
 // If cfg.Logger is set, it is used as-is (bring-your-own-logger).

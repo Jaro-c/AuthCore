@@ -13,8 +13,8 @@ import (
 type fakeProvider struct{}
 
 func (fakeProvider) Config() authcore.Config { return authcore.DefaultConfig() }
-func (fakeProvider) Logger() authcore.Logger  { return silentLogger{} }
-func (fakeProvider) Keys() authcore.Keys      { return nil }
+func (fakeProvider) Logger() authcore.Logger { return silentLogger{} }
+func (fakeProvider) Keys() authcore.Keys     { return nil }
 
 type silentLogger struct{}
 
@@ -87,9 +87,9 @@ func TestValidateAndNormalize_valid(t *testing.T) {
 		"alice-bob",
 		"alice_bob",
 		"a1b2c3",
-		"abc",                          // exactly minLength (3)
-		"a-b",                          // hyphen in middle
-		"a_b",                          // underscore in middle
+		"abc", // exactly minLength (3)
+		"a-b", // hyphen in middle
+		"a_b", // underscore in middle
 		"user123name",
 		strings.Repeat("a", maxLength), // exactly maxLength (32)
 	}
