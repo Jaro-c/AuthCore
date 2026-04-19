@@ -344,6 +344,56 @@ func TestParsePHC_invalidBase64Key(t *testing.T) {
 	}
 }
 
+func TestParsePHC_memoryAboveCeilingRejected(t *testing.T) {
+	// A corrupted or attacker-supplied hash with m=4_000_000_000 would cause
+	// argon2.IDKey to attempt a multi-TiB allocation and crash the process.
+	// The parser must reject it before the key derivation runs.
+	_, _, _, err := parsePHC("$argon2id$v=19$m=4000000000,t=3,p=2$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for memory above ceiling, got nil")
+	}
+}
+
+func TestParsePHC_memoryBelowFloorRejected(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=1,t=3,p=2$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for memory below floor, got nil")
+	}
+}
+
+func TestParsePHC_iterationsAboveCeilingRejected(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=65536,t=1000,p=2$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for iterations above ceiling, got nil")
+	}
+}
+
+func TestParsePHC_iterationsZeroRejected(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=65536,t=0,p=2$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for zero iterations, got nil")
+	}
+}
+
+func TestParsePHC_parallelismZeroRejected(t *testing.T) {
+	_, _, _, err := parsePHC("$argon2id$v=19$m=65536,t=3,p=0$c2FsdA$a2V5")
+	if err == nil {
+		t.Error("expected error for zero parallelism, got nil")
+	}
+}
+
+func TestVerify_malformedStoredHashIsRejectedBeforeKeyDerivation(t *testing.T) {
+	p := newMod(t)
+
+	// If Verify accepted this hash, argon2.IDKey would try to allocate 4 TiB.
+	// parsePHC must surface ErrInvalidHash instead.
+	malicious := "$argon2id$v=19$m=4000000000,t=3,p=2$c2FsdA$a2V5"
+	_, err := p.Verify("any-password-we-do-not-care", malicious)
+	if !errors.Is(err, ErrInvalidHash) {
+		t.Errorf("expected ErrInvalidHash for malicious stored hash, got %v", err)
+	}
+}
+
 // ---- DefaultConfig() --------------------------------------------------------
 
 func TestDefaultConfig_values(t *testing.T) {
