@@ -113,7 +113,7 @@ func writePublicKey(path string, key ed25519.PublicKey) error {
 func readPrivateKey(path string) (ed25519.PrivateKey, error) {
 	// path is built from Config.KeysDir and a fixed filename, both under the
 	// operator's control. Not reachable from user input.
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path derived from trusted config, not user input
+	data, err := os.ReadFile(path) // #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func readPrivateKey(path string) (ed25519.PrivateKey, error) {
 func readPublicKey(path string) (ed25519.PublicKey, error) {
 	// path is built from Config.KeysDir and a fixed filename, both under the
 	// operator's control. Not reachable from user input.
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path derived from trusted config, not user input
+	data, err := os.ReadFile(path) // #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func generateAndSaveRefreshSecret(path string) ([]byte, error) {
 func loadRefreshSecret(path string) ([]byte, error) {
 	// path is built from Config.KeysDir and a fixed filename, both under the
 	// operator's control. Not reachable from user input.
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path derived from trusted config, not user input
+	data, err := os.ReadFile(path) // #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
 	if err != nil {
 		return nil, fmt.Errorf("read refresh secret from %q: %w", path, err)
 	}
