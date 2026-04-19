@@ -7,7 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.0.1] - 2026-04-19
+## [1.1.2] - 2026-04-19
 
 Security-hardening release. No public API changes; existing callers upgrade
 without modification. Two verification paths are now stricter, which can
