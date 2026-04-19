@@ -1,55 +1,123 @@
-# authcore
+<h1 align="center">🛡️ authcore</h1>
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/Jaro-c/authcore.svg)](https://pkg.go.dev/github.com/Jaro-c/authcore)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Jaro-c/authcore)](https://goreportcard.com/report/github.com/Jaro-c/authcore)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/Jaro-c/authcore/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaro-c/authcore/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/Jaro-c/authcore/branch/main/graph/badge.svg)](https://codecov.io/gh/Jaro-c/authcore)
-[![CodeQL](https://github.com/Jaro-c/authcore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jaro-c/authcore/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jaro-c/authcore/badge)](https://scorecard.dev/viewer/?uri=github.com/Jaro-c/authcore)
+<p align="center">
+  <b>Drop-in authentication for Go. Password hashing, JWT sessions, email + username validation — secure defaults, zero boilerplate.</b>
+</p>
 
-**A modular, production-ready authentication library for Go 1.26+.**
+<p align="center">
+  <a href="https://pkg.go.dev/github.com/Jaro-c/authcore"><img src="https://pkg.go.dev/badge/github.com/Jaro-c/authcore.svg" alt="Go Reference"></a>
+  <a href="https://goreportcard.com/report/github.com/Jaro-c/authcore"><img src="https://goreportcard.com/badge/github.com/Jaro-c/authcore" alt="Go Report Card"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-brightgreen.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Jaro-c/authcore/actions/workflows/ci.yml"><img src="https://github.com/Jaro-c/authcore/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/Jaro-c/authcore"><img src="https://codecov.io/gh/Jaro-c/authcore/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="https://github.com/Jaro-c/authcore/actions/workflows/codeql.yml"><img src="https://github.com/Jaro-c/authcore/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Jaro-c/authcore"><img src="https://api.scorecard.dev/projects/github.com/Jaro-c/authcore/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://github.com/sponsors/Jaro-c"><img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ff69b4?logo=githubsponsors" alt="Sponsor"></a>
+</p>
 
-authcore gives you secure token issuance, automatic key management, and a clean plugin architecture — so you can focus on your application instead of cryptographic plumbing.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#why-authcore">Why AuthCore?</a> ·
+  <a href="#modules-at-a-glance">Modules</a> ·
+  <a href="examples/">Examples</a> ·
+  <a href="https://pkg.go.dev/github.com/Jaro-c/authcore">API Docs</a>
+</p>
 
-```
+---
+
+## What is AuthCore?
+
+AuthCore is a Go library that handles the authentication plumbing most apps need — **password hashing, login tokens, refresh/rotation, email + username validation** — without forcing you to become a crypto expert. Import it, call three functions, and you have login that a security auditor would accept.
+
+Written for **Go 1.26+**. No database. No HTTP framework. You plug those in.
+
+```bash
 go get github.com/Jaro-c/authcore
 ```
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    App["Your App"] -->|init once| Core["authcore.AuthCore"]
+    Core -->|manages| Keys[("🔑 Ed25519 keys<br/>HMAC secret<br/>(auto-generated, on disk)")]
+    Core -->|Provider| Mods
+    subgraph Mods["Plug-in modules"]
+        direction TB
+        JWT["auth/jwt<br/>access + refresh tokens"]
+        Pwd["auth/password<br/>Argon2id hashing"]
+        Email["auth/email<br/>validate + DNS MX"]
+        User["auth/username<br/>validate + reserved"]
+    end
+    JWT -->|sign / verify| Client["HTTP client"]
+    Pwd -->|hash / verify| DB[("Your database")]
+    Email -->|normalize| DB
+    User -->|normalize| DB
+```
+
+Pick only the modules you need. Each one is independent, testable, and safe by default.
 
 ---
 
 ## Table of Contents
 
+- [Why AuthCore?](#why-authcore)
+- [Modules at a Glance](#modules-at-a-glance)
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [JWT Authentication](#jwt-authentication)
-  - [Setup](#setup)
-  - [Login — creating a token pair](#login--creating-a-token-pair)
-  - [Authenticating requests](#authenticating-requests)
-  - [Rotating tokens](#rotating-tokens)
-  - [Clock skew tolerance](#clock-skew-tolerance)
 - [Password Hashing](#password-hashing)
-  - [Setup](#setup-1)
-  - [Hashing a password](#hashing-a-password)
-  - [Verifying a password](#verifying-a-password)
-  - [Tuning work parameters](#tuning-work-parameters)
 - [Email Validation](#email-validation)
-  - [Setup](#setup-2)
-  - [Validating and normalizing](#validating-and-normalizing)
-  - [Verifying a domain can receive email](#verifying-a-domain-can-receive-email)
 - [Username Validation](#username-validation)
-  - [Setup](#setup-3)
-  - [Validating and normalizing](#validating-and-normalizing-1)
 - [Key Management](#key-management)
 - [Configuration](#configuration)
 - [Custom Logger](#custom-logger)
+- [Testing Your Auth Layer](#testing-your-auth-layer)
+- [Migrating from bcrypt / other libraries](#migrating-from-bcrypt--other-libraries)
 - [Project Layout](#project-layout)
 - [Writing a Module](#writing-a-module)
 - [Error Handling](#error-handling)
+- [FAQ](#faq)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [Security](#security)
 - [License](#license)
+
+---
+
+## Why AuthCore?
+
+You could roll your own — but password storage, token signing, and timing-safe comparison are the kind of things you only get wrong once. You could also pull in a full identity platform — but that's a lot of surface area for a login form.
+
+AuthCore sits in the middle: **a small, opinionated library that does the dangerous parts for you** and leaves the rest to your app.
+
+| | Roll your own | Full IdP (Ory, Keycloak) | **AuthCore** |
+|---|:---:|:---:|:---:|
+| Time to first login | Hours – days | Hours (with ops) | **5 minutes** |
+| Database included | ❌ (you build it) | ✅ (theirs) | ❌ (**bring your own — any DB works**) |
+| HTTP server included | ❌ | ✅ (theirs) | ❌ (**plug into any router**) |
+| Argon2id password hashing | Manual | ✅ | ✅ |
+| EdDSA access + refresh tokens | Manual | ✅ | ✅ |
+| Timing-safe comparisons | Easy to forget | ✅ | ✅ |
+| Automatic key management | Manual | ✅ | ✅ |
+| OAuth / OIDC provider | ❌ | ✅ | Planned |
+| You own the data model | ✅ | ❌ | ✅ |
+| Runs in-process, no extra service | ✅ | ❌ | ✅ |
+
+Use AuthCore when you want **security defaults without the infrastructure cost** of a dedicated identity platform.
+
+---
+
+## Modules at a Glance
+
+| Module | Does | Import |
+|---|---|---|
+| 🔐 **`auth/jwt`** | Sign + verify access/refresh tokens. EdDSA / Ed25519. Generic custom claims. Rotation. | `github.com/Jaro-c/authcore/auth/jwt` |
+| 🔑 **`auth/password`** | Hash + verify passwords. Argon2id. Policy enforced. PHC format (self-describing). | `github.com/Jaro-c/authcore/auth/password` |
+| 📧 **`auth/email`** | Validate + normalize addresses. RFC 5321/5322. Optional DNS MX check (cached). | `github.com/Jaro-c/authcore/auth/email` |
+| 👤 **`auth/username`** | Validate + normalize usernames. Reserved-name blocklist. Character rules. | `github.com/Jaro-c/authcore/auth/username` |
+
+Each module works on its own — mix and match.
 
 ---
 
@@ -90,44 +158,61 @@ type UserClaims struct {
 
 func main() {
     // 1. One-time setup at startup.
+    //    On first run, Ed25519 keys + HMAC secret are generated in ./.authcore/.
     auth, err := authcore.New(authcore.DefaultConfig())
     if err != nil {
         log.Fatal(err)
     }
 
-    // 2. Password hashing — zero config, secure defaults.
+    // 2. Password hashing — zero config, OWASP-recommended Argon2id defaults.
     pwdMod, err := password.New(auth)
     if err != nil {
         log.Fatal(err)
     }
 
-    // 3. JWT tokens — configure issuer/audience for your service.
+    // 3. JWT tokens — set issuer + audience to your service URL in production.
     jwtMod, err := jwt.New[UserClaims](auth, jwt.DefaultConfig())
     if err != nil {
         log.Fatal(err)
     }
 
-    // Registration: hash and store — never store the plaintext.
-    hash, _ := pwdMod.Hash("user-chosen-password")
-    _ = hash // → db.StorePasswordHash(userID, hash)
+    // Registration: hash the plaintext, store only the hash.
+    hash, err := pwdMod.Hash("Str0ng-P@ssword!")
+    if err != nil {
+        log.Fatal(err) // e.g. password.ErrWeakPassword — surface the reason to the user
+    }
+    // → db.StorePasswordHash(userID, hash)
 
-    // Login: verify password, then issue a token pair.
-    ok, _ := pwdMod.Verify("user-submitted-password", hash)
-    if !ok {
+    // Login: verify the submitted password, then issue a token pair.
+    ok, err := pwdMod.Verify("Str0ng-P@ssword!", hash)
+    if err != nil || !ok {
         log.Fatal("wrong password")
     }
 
-    pair, _ := jwtMod.CreateTokens(userID, UserClaims{Name: "Ana", Role: "admin"})
-    // pair.AccessToken      → Authorization: Bearer header
-    // pair.RefreshToken     → secure httpOnly cookie
-    // pair.RefreshTokenHash → store in your database (never the raw token)
+    // userID must be a UUID v7 — the rest of your app can generate this.
+    userID := "019600ab-1234-7000-8000-000000000001"
+    pair, err := jwtMod.CreateTokens(userID, UserClaims{Name: "Ana", Role: "admin"})
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // pair.AccessToken      → send as `Authorization: Bearer <token>`
+    // pair.RefreshToken     → store client-side in a secure, httpOnly cookie
+    // pair.RefreshTokenHash → store server-side (never the raw refresh token)
+    // pair.SessionID        → UUID v7 shared by both tokens — use as your session row PK
     _ = pair
 }
 ```
 
+> [!TIP]
+> **Want a runnable version?** Every module has a full example under [`examples/`](examples/) — just `go run ./examples/jwt/` to see it work end-to-end.
+
 ---
 
 ## JWT Authentication
+
+<details>
+<summary><b>🔐 Full reference</b> — setup, login, auth, rotation, clock skew · <i>click to expand</i></summary>
 
 ### Setup
 
@@ -245,9 +330,14 @@ cfg.ClockSkewLeeway = 30 * time.Second
 The leeway applies to both access and refresh token verification.
 Keep it small — large values reduce the security margin of short-lived tokens.
 
+</details>
+
 ---
 
 ## Password Hashing
+
+<details>
+<summary><b>🔑 Full reference</b> — hashing, verifying, policy, tuning · <i>click to expand</i></summary>
 
 No boilerplate. No algorithm choices. Just secure password hashing that works.
 
@@ -343,9 +433,14 @@ pwdMod, err := password.New(auth, password.Config{
 > **Old hashes stay valid.** All parameters live inside the hash string itself.
 > Changing the config only affects *new* hashes — existing users keep working.
 
+</details>
+
 ---
 
 ## Email Validation
+
+<details>
+<summary><b>📧 Full reference</b> — validate, normalize, DNS MX · <i>click to expand</i></summary>
 
 ### Setup
 
@@ -423,9 +518,14 @@ case errors.Is(err, email.ErrDomainUnresolvable):
 > unavailable due to network issues unrelated to the user's input. Never
 > block a registration on this error — log it and proceed.
 
+</details>
+
 ---
 
 ## Username Validation
+
+<details>
+<summary><b>👤 Full reference</b> — validate, normalize, reserved names · <i>click to expand</i></summary>
 
 ### Setup
 
@@ -467,9 +567,14 @@ Validation rules:
 > **Always normalize before storing and before querying.** `Alice123` and `alice123`
 > are the same username — store only the canonical (normalized) form.
 
+</details>
+
 ---
 
 ## Key Management
+
+<details>
+<summary><b>🗝️ Full reference</b> — files, persistence, kid header, containers · <i>click to expand</i></summary>
 
 On first run authcore creates `KeysDir` (default `.authcore`) and generates:
 
@@ -494,9 +599,14 @@ auth, err := authcore.New(cfg)
 The `KeyID()` accessor returns a 16-character hex digest derived from the public key.
 It is embedded in every token's `kid` JOSE header, enabling zero-downtime key rotation.
 
+</details>
+
 ---
 
 ## Configuration
+
+<details>
+<summary><b>⚙️ Full reference</b> — EnableLogs, Timezone, Logger, KeysDir · <i>click to expand</i></summary>
 
 ```go
 type Config struct {
@@ -520,9 +630,14 @@ cfg.KeysDir    = "/run/secrets/authcore"  // absolute path in containers
 > `Config{}`. Start from `DefaultConfig()` to get `EnableLogs = true`, then set it to
 > `false` to explicitly opt out.
 
+</details>
+
 ---
 
 ## Custom Logger
+
+<details>
+<summary><b>📝 Full reference</b> — Logger interface, slog / zap / zerolog adapters · <i>click to expand</i></summary>
 
 Implement the `Logger` interface to route authcore output through your existing log pipeline:
 
@@ -544,9 +659,119 @@ cfg.Logger = slog.Default() // or slog.New(yourHandler)
 
 When `Config.Logger` is non-nil it takes precedence over `EnableLogs`.
 
+</details>
+
+---
+
+## Testing Your Auth Layer
+
+<details>
+<summary><b>🧪 Full reference</b> — Provider stub recipe, deterministic time · <i>click to expand</i></summary>
+
+Every AuthCore module accepts a `Provider` interface — not a concrete `*AuthCore` — which means **you never need to generate real keys or touch the disk in tests**. Pass in a stub.
+
+```go
+package mypkg_test
+
+import (
+    "crypto/ed25519"
+    "testing"
+
+    "github.com/Jaro-c/authcore"
+    "github.com/Jaro-c/authcore/auth/jwt"
+)
+
+// stubProvider implements authcore.Provider with fixed, in-memory dependencies.
+type stubProvider struct {
+    cfg    authcore.Config
+    logger authcore.Logger
+    keys   authcore.Keys
+}
+
+func (s *stubProvider) Config() authcore.Config { return s.cfg }
+func (s *stubProvider) Logger() authcore.Logger { return s.logger }
+func (s *stubProvider) Keys() authcore.Keys     { return s.keys }
+
+// stubKeys satisfies authcore.Keys with values you control in the test.
+type stubKeys struct {
+    priv   ed25519.PrivateKey
+    pub    ed25519.PublicKey
+    secret []byte
+    kid    string
+}
+
+func (k *stubKeys) PrivateKey() ed25519.PrivateKey { return k.priv }
+func (k *stubKeys) PublicKey() ed25519.PublicKey   { return k.pub }
+func (k *stubKeys) RefreshSecret() []byte          { return k.secret }
+func (k *stubKeys) KeyID() string                  { return k.kid }
+
+func TestMyHandler(t *testing.T) {
+    pub, priv, _ := ed25519.GenerateKey(nil)
+    p := &stubProvider{
+        cfg:    authcore.DefaultConfig(),
+        logger: &noopLogger{},
+        keys:   &stubKeys{priv: priv, pub: pub, secret: []byte("test-secret-32-bytes-long-xxxxxx"), kid: "test"},
+    }
+
+    jwtMod, err := jwt.New[struct{}](p, jwt.DefaultConfig())
+    if err != nil {
+        t.Fatal(err)
+    }
+    // ... exercise your handler against jwtMod, with no file I/O.
+}
+```
+
+> [!TIP]
+> For deterministic time in tests (e.g. to assert `ExpiresAt`), override `Config.Timezone` and use `time.Now()` equivalents through the same clock your production code reads from.
+
+</details>
+
+---
+
+## Migrating from bcrypt / other libraries
+
+<details>
+<summary><b>🔄 Full reference</b> — re-hash on next login pattern · <i>click to expand</i></summary>
+
+AuthCore can take over password verification from another library **without forcing every user to reset their password**. Use the "re-hash on next login" pattern:
+
+```go
+func Login(email, submitted string) error {
+    user := db.FindUser(email)
+
+    // 1. Try authcore first. New users and already-migrated users land here.
+    if ok, _ := pwdMod.Verify(submitted, user.PasswordHash); ok {
+        return issueSession(user)
+    }
+
+    // 2. Fall back to the legacy hasher (e.g. bcrypt).
+    if !legacyBcrypt.Compare(submitted, user.PasswordHash) {
+        return ErrWrongPassword
+    }
+
+    // 3. Password is correct — upgrade the hash transparently.
+    newHash, err := pwdMod.Hash(submitted)
+    if err != nil {
+        return err
+    }
+    db.UpdatePasswordHash(user.ID, newHash)
+    return issueSession(user)
+}
+```
+
+After a few weeks, most active users are migrated and you can delete the legacy path. Dormant accounts can be forced into password reset the next time they log in.
+
+> [!NOTE]
+> If your existing hashes are already in **PHC Argon2id format** (`$argon2id$v=19$…`), no migration is needed — `pwdMod.Verify` reads all parameters from the stored hash, regardless of which library produced it.
+
+</details>
+
 ---
 
 ## Project Layout
+
+<details>
+<summary><b>📁 Full tree</b> — module organisation + import paths · <i>click to expand</i></summary>
 
 ```
 authcore/
@@ -578,8 +803,6 @@ authcore/
 
 | Import path | Visibility | Purpose |
 |---|---|---|
-| Import path | Visibility | Purpose |
-|---|---|---|
 | `github.com/Jaro-c/authcore` | public | Core types and entry point |
 | `…/auth/jwt` | public | JWT module |
 | `…/auth/password` | public | Argon2id password hashing module |
@@ -588,9 +811,14 @@ authcore/
 | `…/internal/clock` | internal | Shared time abstraction |
 | `…/internal/keymanager` | internal | Key generation and persistence |
 
+</details>
+
 ---
 
 ## Writing a Module
+
+<details>
+<summary><b>🧩 Full guide</b> — Provider contract + minimal module skeleton · <i>click to expand</i></summary>
 
 Modules depend on `authcore.Provider` — not the concrete `*AuthCore` — so they remain
 independently testable without touching the filesystem or generating real keys.
@@ -630,9 +858,14 @@ func (m *MyModule) Name() string { return "mypkg" }
 
 In tests, inject a stub `Provider` that returns fixed keys — no disk I/O required.
 
+</details>
+
 ---
 
 ## Error Handling
+
+<details>
+<summary><b>🚨 Full reference</b> — every sentinel error, per package · <i>click to expand</i></summary>
 
 ### authcore package
 
@@ -685,53 +918,92 @@ if errors.Is(err, jwt.ErrTokenExpired) {
 }
 ```
 
+</details>
+
 ---
 
 ## FAQ
 
-**My access token fails verification in a distributed system — is clock skew the issue?**
+<details>
+<summary><b>Do I need a database to use AuthCore?</b></summary>
 
-Yes. Different servers may have clocks that drift a few seconds apart, causing
-`ErrTokenExpired` on a brand-new token. Set `ClockSkewLeeway` in your JWT config:
+No — AuthCore never touches your database. It hashes passwords, signs tokens, and validates input. *You* store hashes, usernames, and refresh-token hashes wherever your app already keeps data (Postgres, Redis, SQLite, even an in-memory `map` for a toy project).
+
+</details>
+
+<details>
+<summary><b>What is a UUID v7 and why does `CreateTokens` require one?</b></summary>
+
+UUID v7 is a 128-bit identifier whose first 48 bits are a millisecond Unix timestamp (RFC 9562 §5.7). That means UUID v7 values **sort naturally by creation time** — ideal as a database primary key and as a stable session identifier. AuthCore requires v7 for the `sub` claim so your sessions always sort chronologically.
+
+Libraries that generate UUID v7 in Go: `github.com/google/uuid` (≥ v1.6), `github.com/gofrs/uuid`.
+
+</details>
+
+<details>
+<summary><b>Do I really need refresh token rotation?</b></summary>
+
+Short answer: yes, if your refresh token lives longer than a few minutes. Rotation limits the blast radius of a stolen refresh token — once the legitimate client rotates, the stolen copy is rejected. Combined with storing only the **hash** of refresh tokens on the server, an attacker who dumps your database still cannot forge new sessions.
+
+</details>
+
+<details>
+<summary><b>My access token fails verification in a distributed system — is clock skew the issue?</b></summary>
+
+Yes. Different servers may have clocks that drift a few seconds apart, causing `ErrTokenExpired` on a brand-new token. Set `ClockSkewLeeway` in your JWT config:
 
 ```go
 cfg := jwt.DefaultConfig()
 cfg.ClockSkewLeeway = 5 * time.Second
 ```
 
----
+Keep it small (5–30 s). Larger values erode the security margin of short-lived tokens.
 
-**I'm getting `ErrKeyManager` on startup. What went wrong?**
+</details>
 
-authcore could not read or create its key files. Check that:
+<details>
+<summary><b>I'm getting `ErrKeyManager` on startup. What went wrong?</b></summary>
+
+AuthCore could not read or create its key files. Check that:
+
 1. `KeysDir` (default `.authcore`) is writable by the process.
 2. The directory is not a read-only filesystem (common in some container setups).
-3. Existing key files are not corrupted — delete `.authcore` and let authcore regenerate them.
+3. Existing key files are not corrupted — delete `.authcore` and let AuthCore regenerate them. **Warning:** regenerating keys invalidates every token currently in circulation.
 
----
+</details>
 
-**Can I verify tokens issued before I rotated my signing key?**
+<details>
+<summary><b>Can I verify tokens issued before I rotated my signing key?</b></summary>
 
-Yes. authcore embeds the `kid` (key ID) in every token header. When you add a new
-key pair, keep the old public key in the key store under its original `kid`. The
-verifier will select the right key automatically. See the
-[Key Management](#key-management) section for the rotation workflow.
+Yes. AuthCore embeds the `kid` (key ID) in every token header. When you add a new key pair, keep the old public key in the key store under its original `kid`. The verifier will select the right key automatically. See the [Key Management](#key-management) section for the rotation workflow.
 
----
+</details>
 
-**My existing password hashes were created with a different library. Can I migrate?**
+<details>
+<summary><b>My existing password hashes were created with a different library. Can I migrate?</b></summary>
 
-Yes, as long as the hashes are in PHC string format (`$argon2id$v=19$...`).
-`Verify` reads all parameters from the stored hash, so it works regardless of which
-library produced it. For hashes in a legacy format, validate the password at your
-application layer before calling `Hash`, then re-hash on the user's next successful login.
+Yes. See [Migrating from bcrypt / other libraries](#migrating-from-bcrypt--other-libraries) for the re-hash-on-next-login pattern. If your hashes are already in PHC Argon2id format (`$argon2id$v=19$…`), no migration is needed at all — `pwdMod.Verify` reads parameters from the stored hash.
 
----
+</details>
 
-**The `Hash` call is slower than expected in tests. Is that normal?**
+<details>
+<summary><b>Can I run AuthCore in Docker / Kubernetes?</b></summary>
 
-Yes — Argon2id deliberately takes ~100–300 ms and allocates 64 MiB of RAM per call.
-In tests, use a low-cost config to avoid slow suites:
+Yes. Point `KeysDir` at a mounted secrets volume so keys survive container restarts and are shared across replicas:
+
+```go
+cfg := authcore.DefaultConfig()
+cfg.KeysDir = os.Getenv("AUTHCORE_KEYS_DIR") // e.g. /run/secrets/authcore
+```
+
+Pre-generate the key files once (a one-shot job that runs AuthCore against the volume), then mount them read-only into your app.
+
+</details>
+
+<details>
+<summary><b>The `Hash` call is slower than expected in tests. Is that normal?</b></summary>
+
+Yes — Argon2id deliberately takes ~100–300 ms and allocates 64 MiB of RAM per call. In tests, use a low-cost config to avoid slow suites:
 
 ```go
 pwd, _ := password.New(auth, password.Config{
@@ -741,30 +1013,54 @@ pwd, _ := password.New(auth, password.Config{
 })
 ```
 
+</details>
+
+<details>
+<summary><b>Does AuthCore ship an HTTP server, middleware, or CSRF protection?</b></summary>
+
+No — AuthCore gives you the primitives (hash, sign, verify, rotate) and stays framework-agnostic. See [`examples/fiber`](examples/fiber/) and [`examples/gin`](examples/gin/) for wiring into a real HTTP stack, including protected-route middleware.
+
+</details>
+
 ---
 
 ## Coverage
+
+<details>
+<summary><b>📊 Sunburst coverage graph</b> · <i>click to expand</i></summary>
 
 [![Sunburst](https://codecov.io/github/Jaro-c/AuthCore/graphs/sunburst.svg?token=YXE6LDJFCQ)](https://app.codecov.io/gh/Jaro-c/AuthCore)
 
 Each ring is a directory; each slice is a file. Greener wedges are better covered. Click through for the full per-line report on Codecov.
 
+</details>
+
 ---
 
 ## Roadmap
 
-- [x] Core library — key management, logger, clock, Provider interface
-- [x] `auth/jwt` — EdDSA token issuance, verification, rotation, timing-safe hash
-- [x] `auth/password` — Argon2id password hashing with PHC format
-- [x] `auth/email` — RFC 5321/5322 validation, normalization, DNS MX verification with cache
-- [x] `auth/username` — validation, normalization, reserved name blocklist, configurable length limits
-- [ ] `auth/apikey` — opaque key generation with pluggable store interface *(future)*
-- [ ] `auth/oauth` — OAuth 2.0 / OIDC provider integration *(future)*
-- [ ] Key rotation helpers — zero-downtime rotation via `kid` header *(future)*
+Shipped:
+
+- ✅ **Core library** — key management, logger, clock, Provider interface
+- ✅ **`auth/jwt`** — EdDSA token issuance, verification, rotation, timing-safe hash
+- ✅ **`auth/password`** — Argon2id password hashing with PHC format
+- ✅ **`auth/email`** — RFC 5321/5322 validation, normalization, DNS MX verification with cache
+- ✅ **`auth/username`** — validation, normalization, reserved name blocklist
+
+Planned (no hard ETA — subject to community input):
+
+- 🚧 **`auth/apikey`** — opaque key generation with a pluggable store interface
+- 🚧 **Key rotation helpers** — zero-downtime rotation via the `kid` header
+- 🕐 **`auth/oauth`** — OAuth 2.0 / OIDC provider integration *(larger scope, later)*
+
+Have an opinion on priority, or a use case we haven't thought about? Open a [discussion](https://github.com/Jaro-c/authcore/discussions) — the roadmap bends toward real user needs.
 
 ---
 
 ## API Stability
+
+<details>
+<summary><b>ℹ️ Versioning policy</b> — v0.x breaking allowed, v1.0 locked · <i>click to expand</i></summary>
 
 authcore follows [Semantic Versioning](https://semver.org).
 
@@ -773,16 +1069,33 @@ authcore follows [Semantic Versioning](https://semver.org).
 
 Internal packages (`internal/…`) carry no compatibility guarantees at any version and must not be imported from outside the module.
 
+</details>
+
+---
+
+## Get Started Now
+
+Ready to add secure auth to your Go app? Here's the 2-minute path:
+
+1. 📦 **Install** — `go get github.com/Jaro-c/authcore`
+2. ⚡ **Copy** the [Quick Start](#quick-start) above into your `main.go`
+3. 🧪 **Run** a module example end-to-end — [`examples/jwt`](examples/jwt/), [`examples/password`](examples/password/), [`examples/fiber`](examples/fiber/), [`examples/gin`](examples/gin/)
+4. 📖 **Reference** the [full API on pkg.go.dev](https://pkg.go.dev/github.com/Jaro-c/authcore)
+
+⭐ **If AuthCore saved you from writing your own password hasher, please star the repo** — it helps others find it.
+
+❤️ **Keeping it free and maintained takes time.** If you or your company depend on AuthCore, consider [sponsoring on GitHub](https://github.com/sponsors/Jaro-c) — any amount funds continued security audits and new modules.
+
 ---
 
 ## Contributing
 
-Contributions are welcome! Please read the [Contributing Guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request.
+Contributions are welcome! Please read the [Contributing Guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request. Bug reports, feature ideas, and docs improvements are all valuable — open an [issue](https://github.com/Jaro-c/authcore/issues) or [discussion](https://github.com/Jaro-c/authcore/discussions) any time.
 
 ## Security
 
 To report a vulnerability, please follow the [Security Policy](SECURITY.md).
-Do not open a public issue for security bugs.
+Do not open a public issue for security bugs — coordinated disclosure keeps users safe while a fix is prepared.
 
 ## License
 

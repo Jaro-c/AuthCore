@@ -59,18 +59,24 @@ type Provider interface {
 // implement. It acts as a marker interface today and will grow as shared
 // lifecycle requirements (e.g. Close, HealthCheck) are identified.
 //
-// Available implementations:
+// Available implementations and their concrete constructors:
 //
 //	auth/jwt      — JSON Web Token authentication (EdDSA / Ed25519)
+//	                  jwt.New[T any](p authcore.Provider, cfg jwt.Config) (*jwt.JWT[T], error)
 //	auth/password — Argon2id password hashing
-//	auth/email    — email validation and normalization
+//	                  password.New(p authcore.Provider, cfg ...password.Config) (*password.Password, error)
+//	auth/email    — email validation, normalization, DNS MX verification
+//	                  email.New(p authcore.Provider, cfg ...email.Config) (*email.Email, error)
+//	auth/username — username validation, normalization, reserved name blocklist
+//	                  username.New(p authcore.Provider) (*username.Username, error)
 //
-// Module constructors follow the convention:
+// Conventions shared by every module:
 //
-//	func New(p authcore.Provider, cfg ...Config) (*T, error)
-//
-// where T is the concrete module type and cfg is the optional module-specific
-// configuration. Omitting cfg applies safe, production-ready defaults.
+//  1. The first argument is always an authcore.Provider (never a concrete *AuthCore).
+//  2. Omitting cfg (where variadic) or passing a zero-value Config applies safe,
+//     production-ready defaults via each module's applyDefaults helper.
+//  3. Constructors return a pointer receiver; concrete types are safe for
+//     concurrent use across goroutines after construction completes.
 type Module interface {
 	// Name returns the unique, lowercase identifier of this module.
 	// It must be stable across releases because callers may use it as a key.
