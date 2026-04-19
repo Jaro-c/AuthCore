@@ -24,7 +24,11 @@ jobs:
       - name: Run gosec
         uses: securego/gosec@64b97151cd7b978abdf8d2f1159a4e9096a12c2b # master
         with:
-          args: '-fmt sarif -out results.sarif -no-fail ./...'
+          # G104 (errcheck on logger Output) and G306 (public-key 0644) are
+          # justified in code with //nolint:gosec; standalone gosec ignores
+          # those pragmas so we exclude the rule IDs at the workflow layer.
+          # G115 mirrors the .golangci.yml exclusion for UUID/time math.
+          args: '-fmt sarif -out results.sarif -no-fail -exclude=G104,G115,G306 ./...'
 
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
