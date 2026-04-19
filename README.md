@@ -1093,12 +1093,12 @@ Have an opinion on priority, or a use case we haven't thought about? Open a [dis
 ## API Stability
 
 <details>
-<summary><b>ℹ️ Versioning policy</b> — v0.x breaking allowed, v1.0 locked · <i>click to expand</i></summary>
+<summary><b>ℹ️ Versioning policy</b> — v1.x public API is frozen · <i>click to expand</i></summary>
 
 authcore follows [Semantic Versioning](https://semver.org).
 
-- **`v0.x` (current)** — the public API may introduce breaking changes between minor releases while the library matures. Pin your dependency with `go.sum` and review release notes before upgrading.
-- **`v1.0.0` (future)** — once published, the public API is covered by compatibility guarantees. Breaking changes will only ship in a new major version.
+- **`v1.x` (current)** — the public API is frozen under semver guarantees. Breaking changes only ship in a new major version (`v2.0.0`). Minor releases add features; patch releases fix bugs or harden existing code paths without changing public shapes.
+- **`v1.2.0`** shipped defence-in-depth hardenings: JWT TTL caps, `kid` header matching, Unicode NFC password normalisation, IDN email support, and a PEM file size cap. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 Internal packages (`internal/…`) carry no compatibility guarantees at any version and must not be imported from outside the module.
 
