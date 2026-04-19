@@ -129,7 +129,9 @@ func main() {
 		ok, err := pwdMod.Verify(req.Password, u.passwordHash)
 		if err != nil {
 			// ErrInvalidHash is INTERNAL — log it, return generic 401.
-			log.Printf("verify error for %s: %v", req.Email, err)
+			// %q quotes and escapes control characters so a hostile email
+			// containing newlines cannot forge extra log entries.
+			log.Printf("verify error for %q: %v", req.Email, err)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
 		}
 		if !ok {
@@ -197,11 +199,6 @@ func main() {
 		if err := c.Bind().JSON(&req); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
 		}
-
-		// Verify the token is well-formed to extract the subject (user ID).
-		claims, err := jwtMod.VerifyAccessToken(req.RefreshToken)
-		_ = claims
-		// Note: for refresh tokens use VerifyRefreshTokenHash first, then RotateTokens.
 
 		mu.RLock()
 		// In production: look up user by session ID from the refresh token claims.

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+# Least-privilege GITHUB_TOKEN. golangci-lint-action only needs to read code.
+permissions:
+  contents: read
+
 jobs:
   golangci:
     name: lint

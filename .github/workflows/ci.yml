@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+# Least-privilege GITHUB_TOKEN. Jobs only read the code and upload coverage.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build and Test
