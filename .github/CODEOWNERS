@@ -1,0 +1,16 @@
+# CODEOWNERS — auto-assigned reviewers for pull requests.
+# Reference: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo.
+*                       @Jaro-c
+
+# Workflows and repo-level config.
+/.github/               @Jaro-c
+
+# Security-sensitive code paths.
+/auth/jwt/              @Jaro-c
+/auth/password/         @Jaro-c
+/internal/keymanager/   @Jaro-c
+
+# Documentation.
+*.md                    @Jaro-c
