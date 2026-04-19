@@ -211,6 +211,9 @@ func main() {
 
 ## JWT Authentication
 
+<details>
+<summary><b>🔐 Full reference</b> — setup, login, auth, rotation, clock skew · <i>click to expand</i></summary>
+
 ### Setup
 
 ```go
@@ -327,9 +330,14 @@ cfg.ClockSkewLeeway = 30 * time.Second
 The leeway applies to both access and refresh token verification.
 Keep it small — large values reduce the security margin of short-lived tokens.
 
+</details>
+
 ---
 
 ## Password Hashing
+
+<details>
+<summary><b>🔑 Full reference</b> — hashing, verifying, policy, tuning · <i>click to expand</i></summary>
 
 No boilerplate. No algorithm choices. Just secure password hashing that works.
 
@@ -425,9 +433,14 @@ pwdMod, err := password.New(auth, password.Config{
 > **Old hashes stay valid.** All parameters live inside the hash string itself.
 > Changing the config only affects *new* hashes — existing users keep working.
 
+</details>
+
 ---
 
 ## Email Validation
+
+<details>
+<summary><b>📧 Full reference</b> — validate, normalize, DNS MX · <i>click to expand</i></summary>
 
 ### Setup
 
@@ -505,9 +518,14 @@ case errors.Is(err, email.ErrDomainUnresolvable):
 > unavailable due to network issues unrelated to the user's input. Never
 > block a registration on this error — log it and proceed.
 
+</details>
+
 ---
 
 ## Username Validation
+
+<details>
+<summary><b>👤 Full reference</b> — validate, normalize, reserved names · <i>click to expand</i></summary>
 
 ### Setup
 
@@ -549,9 +567,14 @@ Validation rules:
 > **Always normalize before storing and before querying.** `Alice123` and `alice123`
 > are the same username — store only the canonical (normalized) form.
 
+</details>
+
 ---
 
 ## Key Management
+
+<details>
+<summary><b>🗝️ Full reference</b> — files, persistence, kid header, containers · <i>click to expand</i></summary>
 
 On first run authcore creates `KeysDir` (default `.authcore`) and generates:
 
@@ -576,9 +599,14 @@ auth, err := authcore.New(cfg)
 The `KeyID()` accessor returns a 16-character hex digest derived from the public key.
 It is embedded in every token's `kid` JOSE header, enabling zero-downtime key rotation.
 
+</details>
+
 ---
 
 ## Configuration
+
+<details>
+<summary><b>⚙️ Full reference</b> — EnableLogs, Timezone, Logger, KeysDir · <i>click to expand</i></summary>
 
 ```go
 type Config struct {
@@ -602,9 +630,14 @@ cfg.KeysDir    = "/run/secrets/authcore"  // absolute path in containers
 > `Config{}`. Start from `DefaultConfig()` to get `EnableLogs = true`, then set it to
 > `false` to explicitly opt out.
 
+</details>
+
 ---
 
 ## Custom Logger
+
+<details>
+<summary><b>📝 Full reference</b> — Logger interface, slog / zap / zerolog adapters · <i>click to expand</i></summary>
 
 Implement the `Logger` interface to route authcore output through your existing log pipeline:
 
@@ -626,9 +659,14 @@ cfg.Logger = slog.Default() // or slog.New(yourHandler)
 
 When `Config.Logger` is non-nil it takes precedence over `EnableLogs`.
 
+</details>
+
 ---
 
 ## Testing Your Auth Layer
+
+<details>
+<summary><b>🧪 Full reference</b> — Provider stub recipe, deterministic time · <i>click to expand</i></summary>
 
 Every AuthCore module accepts a `Provider` interface — not a concrete `*AuthCore` — which means **you never need to generate real keys or touch the disk in tests**. Pass in a stub.
 
@@ -686,9 +724,14 @@ func TestMyHandler(t *testing.T) {
 > [!TIP]
 > For deterministic time in tests (e.g. to assert `ExpiresAt`), override `Config.Timezone` and use `time.Now()` equivalents through the same clock your production code reads from.
 
+</details>
+
 ---
 
 ## Migrating from bcrypt / other libraries
+
+<details>
+<summary><b>🔄 Full reference</b> — re-hash on next login pattern · <i>click to expand</i></summary>
 
 AuthCore can take over password verification from another library **without forcing every user to reset their password**. Use the "re-hash on next login" pattern:
 
@@ -721,9 +764,14 @@ After a few weeks, most active users are migrated and you can delete the legacy 
 > [!NOTE]
 > If your existing hashes are already in **PHC Argon2id format** (`$argon2id$v=19$…`), no migration is needed — `pwdMod.Verify` reads all parameters from the stored hash, regardless of which library produced it.
 
+</details>
+
 ---
 
 ## Project Layout
+
+<details>
+<summary><b>📁 Full tree</b> — module organisation + import paths · <i>click to expand</i></summary>
 
 ```
 authcore/
@@ -763,9 +811,14 @@ authcore/
 | `…/internal/clock` | internal | Shared time abstraction |
 | `…/internal/keymanager` | internal | Key generation and persistence |
 
+</details>
+
 ---
 
 ## Writing a Module
+
+<details>
+<summary><b>🧩 Full guide</b> — Provider contract + minimal module skeleton · <i>click to expand</i></summary>
 
 Modules depend on `authcore.Provider` — not the concrete `*AuthCore` — so they remain
 independently testable without touching the filesystem or generating real keys.
@@ -805,9 +858,14 @@ func (m *MyModule) Name() string { return "mypkg" }
 
 In tests, inject a stub `Provider` that returns fixed keys — no disk I/O required.
 
+</details>
+
 ---
 
 ## Error Handling
+
+<details>
+<summary><b>🚨 Full reference</b> — every sentinel error, per package · <i>click to expand</i></summary>
 
 ### authcore package
 
@@ -859,6 +917,8 @@ if errors.Is(err, jwt.ErrTokenExpired) {
     // prompt the client to refresh
 }
 ```
+
+</details>
 
 ---
 
@@ -966,9 +1026,14 @@ No — AuthCore gives you the primitives (hash, sign, verify, rotate) and stays 
 
 ## Coverage
 
+<details>
+<summary><b>📊 Sunburst coverage graph</b> · <i>click to expand</i></summary>
+
 [![Sunburst](https://codecov.io/github/Jaro-c/AuthCore/graphs/sunburst.svg?token=YXE6LDJFCQ)](https://app.codecov.io/gh/Jaro-c/AuthCore)
 
 Each ring is a directory; each slice is a file. Greener wedges are better covered. Click through for the full per-line report on Codecov.
+
+</details>
 
 ---
 
@@ -994,12 +1059,17 @@ Have an opinion on priority, or a use case we haven't thought about? Open a [dis
 
 ## API Stability
 
+<details>
+<summary><b>ℹ️ Versioning policy</b> — v0.x breaking allowed, v1.0 locked · <i>click to expand</i></summary>
+
 authcore follows [Semantic Versioning](https://semver.org).
 
 - **`v0.x` (current)** — the public API may introduce breaking changes between minor releases while the library matures. Pin your dependency with `go.sum` and review release notes before upgrading.
 - **`v1.0.0` (future)** — once published, the public API is covered by compatibility guarantees. Breaking changes will only ship in a new major version.
 
 Internal packages (`internal/…`) carry no compatibility guarantees at any version and must not be imported from outside the module.
+
+</details>
 
 ---
 
