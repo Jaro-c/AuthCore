@@ -17,7 +17,11 @@ type Config struct {
 	// Defaults to 24 hours.
 	RefreshTokenTTL time.Duration
 
-	// Issuer is the value of the "iss" claim in every token.
+	// Issuer is the value of the "iss" claim in every token issued by this
+	// module, and the value VerifyAccessToken / RotateTokens require the
+	// "iss" claim to match on verification. Tokens whose iss does not equal
+	// this string are rejected with ErrTokenInvalid.
+	//
 	// Defaults to "github.com/Jaro-c/authcore".
 	// Override this with your own service URL or identifier (e.g. "https://auth.example.com").
 	Issuer string
