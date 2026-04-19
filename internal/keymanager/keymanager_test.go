@@ -30,6 +30,27 @@ func newKM(t *testing.T) *keymanager.KeyManager {
 
 // ----- generation -------------------------------------------------------------
 
+func TestNew_oversizedKeyFileRejected(t *testing.T) {
+	// A valid Ed25519 PEM is ~200 bytes. An attacker-replaced key file
+	// several megabytes long would previously be loaded whole into
+	// memory before pem.Decode rejected it. The capped reader must
+	// surface a size error before the allocation.
+	dir := t.TempDir()
+	oversized := make([]byte, 100*1024) // 100 KiB, well above the 4 KiB cap
+	// Pair both key files so New() takes the "load existing" branch.
+	if err := os.WriteFile(filepath.Join(dir, "ed25519_private.pem"), oversized, 0600); err != nil {
+		t.Fatalf("seed oversized private key: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ed25519_public.pem"), []byte("fake"), 0644); err != nil {
+		t.Fatalf("seed public key: %v", err)
+	}
+
+	_, err := keymanager.New(dir, testLogger{t})
+	if err == nil {
+		t.Fatal("expected error when private key file exceeds size cap, got nil")
+	}
+}
+
 func TestNew_generatesAllFiles(t *testing.T) {
 	dir := t.TempDir()
 	_, err := keymanager.New(dir, testLogger{t})

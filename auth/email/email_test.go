@@ -179,6 +179,21 @@ func TestValidateAndNormalize_normalizes(t *testing.T) {
 	}
 }
 
+func TestValidateAndNormalize_idnDomainConvertedToPunycode(t *testing.T) {
+	// "münchen.de" is a legitimate German internationalised domain name.
+	// Without IDN support the validator rejects it as non-ASCII; with IDN
+	// support it is converted to its punycode (xn--mnchen-3ya.de) form that
+	// DNS can actually resolve.
+	got, err := newMod(t).ValidateAndNormalize("user@münchen.de")
+	if err != nil {
+		t.Fatalf("unexpected error for IDN email: %v", err)
+	}
+	want := "user@xn--mnchen-3ya.de"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestValidateAndNormalize_invalidReturnsError(t *testing.T) {
 	_, err := newMod(t).ValidateAndNormalize("not-an-email")
 	if !errors.Is(err, ErrInvalidEmail) {

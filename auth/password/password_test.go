@@ -148,6 +148,35 @@ func TestVerify_correctPassword(t *testing.T) {
 	}
 }
 
+func TestVerify_unicodeNFDInputMatchesNFCHash(t *testing.T) {
+	mod := newMod(t)
+
+	// Register with precomposed "é" (U+00E9) — the NFC form typically
+	// produced by macOS and most IMEs.
+	precomposed := "Contraseña-Seguro9!" // "ñ" as single codepoint U+00F1
+	hash, err := mod.Hash(precomposed)
+	if err != nil {
+		t.Fatalf("Hash() error = %v", err)
+	}
+
+	// Log back in with the same password typed on a system that uses the
+	// NFD decomposed form: "n" + combining tilde (U+006E U+0303). Without
+	// NFC normalisation at Verify time the bytes differ → Argon2id hash
+	// differs → user locked out. With normalisation, they match.
+	decomposed := strings.ReplaceAll(precomposed, "ñ", "n\u0303")
+	if decomposed == precomposed {
+		t.Fatalf("test setup error: decomposed form is identical to input")
+	}
+
+	ok, err := mod.Verify(decomposed, hash)
+	if err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+	if !ok {
+		t.Error("Verify() = false for NFD form of the same password, want true — NFC normalisation missing")
+	}
+}
+
 func TestVerify_wrongPassword(t *testing.T) {
 	mod := newMod(t)
 	hash, err := mod.Hash("My-Secret-Pass9!")

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	gjwt "github.com/golang-jwt/jwt/v5"
+
 	"github.com/Jaro-c/authcore"
 	"github.com/Jaro-c/authcore/internal/clock"
 )
@@ -110,6 +112,27 @@ func TestNew_defaultConfigSucceeds(t *testing.T) {
 func TestNew_negativeTTLReturnsError(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.AccessTokenTTL = -1 * time.Second
+
+	_, err := New[struct{}](newFakeProvider(t), cfg)
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Errorf("expected ErrInvalidConfig, got %v", err)
+	}
+}
+
+func TestNew_accessTTLAboveCeilingReturnsError(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AccessTokenTTL = 48 * time.Hour // above 24 h ceiling
+	cfg.RefreshTokenTTL = 96 * time.Hour
+
+	_, err := New[struct{}](newFakeProvider(t), cfg)
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Errorf("expected ErrInvalidConfig, got %v", err)
+	}
+}
+
+func TestNew_refreshTTLAboveCeilingReturnsError(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.RefreshTokenTTL = 2 * 365 * 24 * time.Hour // above 365-day ceiling
 
 	_, err := New[struct{}](newFakeProvider(t), cfg)
 	if !errors.Is(err, ErrInvalidConfig) {
@@ -382,6 +405,29 @@ func TestVerifyAccessToken_wrongIssuerRejectsToken(t *testing.T) {
 	_, err := j2.VerifyAccessToken(pair.AccessToken)
 	if !errors.Is(err, ErrTokenInvalid) {
 		t.Errorf("expected ErrTokenInvalid when issuer does not match, got %v", err)
+	}
+}
+
+func TestVerifyAccessToken_unknownKidRejectsToken(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+
+	// Craft a token signed with the module's private key (so the signature
+	// is valid) but with a "kid" header the verifier does not recognise.
+	// This simulates an attacker who has obtained a signing key but whose
+	// "kid" is not on the verifier's trusted list — the kid check must
+	// reject the token before it is accepted.
+	claims := newAccessClaims(j.cfg.Issuer, testSubject, "019600ab-0000-7000-8000-000000000001", j.cfg.Audience, struct{}{}, epoch, j.cfg.AccessTokenTTL)
+	claims.Type = tokenTypeAccess
+	token := gjwt.NewWithClaims(gjwt.SigningMethodEdDSA, claims)
+	token.Header["kid"] = "attacker-controlled-kid"
+	tampered, err := token.SignedString(j.priv)
+	if err != nil {
+		t.Fatalf("sign tampered token: %v", err)
+	}
+
+	_, err = j.VerifyAccessToken(tampered)
+	if !errors.Is(err, ErrTokenInvalid) {
+		t.Errorf("expected ErrTokenInvalid for unknown kid, got %v", err)
 	}
 }
 

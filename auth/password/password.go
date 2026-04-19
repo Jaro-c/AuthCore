@@ -59,6 +59,7 @@ import (
 
 	"github.com/Jaro-c/authcore"
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -132,7 +133,7 @@ func (p *Password) Name() string { return "password" }
 //
 // This check is identical to the one Hash performs internally.
 func (p *Password) ValidatePolicy(plaintext string) error {
-	if err := checkPolicy(plaintext); err != nil {
+	if err := checkPolicy(norm.NFC.String(plaintext)); err != nil {
 		return &policyViolation{reason: err}
 	}
 	return nil
@@ -197,6 +198,12 @@ func checkPolicy(plaintext string) error {
 //	if errors.Is(err, password.ErrWeakPassword) { /* tell the user what's wrong */ }
 //	db.StorePasswordHash(userID, hash)
 func (p *Password) Hash(plaintext string) (string, error) {
+	// Normalise to Unicode NFC so the same visual password typed on different
+	// systems (precomposed vs combining accents, e.g. "café" as one codepoint
+	// vs "e" + combining-acute) produces the same hash. Without this, users
+	// who register on one platform and sign in on another can be locked out.
+	plaintext = norm.NFC.String(plaintext)
+
 	// Validate before hashing — fail fast before spending ~64 MiB of RAM on Argon2id.
 	if err := checkPolicy(plaintext); err != nil {
 		return "", &policyViolation{reason: err}
@@ -247,6 +254,11 @@ func (p *Password) Hash(plaintext string) (string, error) {
 //	if errors.Is(err, password.ErrInvalidHash) { ... } // hash is malformed or out of range
 //	if !ok { return http.StatusUnauthorized }
 func (p *Password) Verify(plaintext, phcHash string) (bool, error) {
+	// Normalise to Unicode NFC (matching Hash) so the user can sign in from a
+	// different platform than the one they registered on without losing access
+	// to their account.
+	plaintext = norm.NFC.String(plaintext)
+
 	// Extract the Argon2id parameters and salt embedded in the stored hash.
 	// Using the stored parameters — not the current module config — means old
 	// hashes remain valid even after the work factors are tuned upward.

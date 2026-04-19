@@ -98,11 +98,11 @@ func signToken(claims gjwt.Claims, key ed25519.PrivateKey, kid string) (string, 
 // signed by the same key but issued for a different service would otherwise be
 // accepted here.
 // leeway is added to the expiration window to tolerate small clock skew between servers.
-func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.Time, issuer, audience string, leeway time.Duration) (*accessClaims[T], error) {
+func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, kid string, now time.Time, issuer, audience string, leeway time.Duration) (*accessClaims[T], error) {
 	var c accessClaims[T]
 	_, err := gjwt.ParseWithClaims(
 		tokenStr, &c,
-		eddsaKeyFunc(pub), // enforce EdDSA alg; rejects HS256/RS256 confusion attacks
+		eddsaKeyFunc(pub, kid),                             // enforce EdDSA alg + kid match; rejects HS256/RS256 confusion attacks and unknown key IDs
 		gjwt.WithTimeFunc(func() time.Time { return now }), // inject clock so tests can freeze time
 		gjwt.WithExpirationRequired(),                      // reject tokens without an exp claim
 		gjwt.WithIssuedAt(),                                // reject tokens with iat in the future
@@ -122,11 +122,11 @@ func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.T
 // signed by the same key but issued for a different service would otherwise be
 // accepted here.
 // leeway is added to the expiration window to tolerate small clock skew between servers.
-func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, now time.Time, issuer, audience string, leeway time.Duration) (*refreshClaims, error) {
+func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, kid string, now time.Time, issuer, audience string, leeway time.Duration) (*refreshClaims, error) {
 	var c refreshClaims
 	_, err := gjwt.ParseWithClaims(
 		tokenStr, &c,
-		eddsaKeyFunc(pub), // enforce EdDSA alg; rejects HS256/RS256 confusion attacks
+		eddsaKeyFunc(pub, kid),                             // enforce EdDSA alg + kid match; rejects HS256/RS256 confusion attacks and unknown key IDs
 		gjwt.WithTimeFunc(func() time.Time { return now }), // inject clock so tests can freeze time
 		gjwt.WithExpirationRequired(),                      // reject tokens without an exp claim
 		gjwt.WithIssuedAt(),                                // reject tokens with iat in the future
@@ -140,8 +140,12 @@ func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, now time.Time, i
 	return &c, nil
 }
 
-// eddsaKeyFunc returns a gjwt.Keyfunc that enforces EdDSA and returns pub.
-func eddsaKeyFunc(pub ed25519.PublicKey) gjwt.Keyfunc {
+// eddsaKeyFunc returns a gjwt.Keyfunc that enforces EdDSA, validates the
+// token's "kid" header against the expected value, and returns pub.
+// Rejecting unknown kids narrows the verifier to keys the operator has
+// actually authorised, which matters once key rotation is in play (the
+// verifier would otherwise happily try pub against every incoming kid).
+func eddsaKeyFunc(pub ed25519.PublicKey, expectedKID string) gjwt.Keyfunc {
 	return func(t *gjwt.Token) (any, error) {
 		// Explicitly reject any algorithm that is not EdDSA.
 		// Without this check an attacker could craft a token with alg=HS256
@@ -149,6 +153,15 @@ func eddsaKeyFunc(pub ed25519.PublicKey) gjwt.Keyfunc {
 		// algorithm confusion attack that allows signature forgery.
 		if _, ok := t.Method.(*gjwt.SigningMethodEd25519); !ok {
 			return nil, fmt.Errorf("%w: unexpected alg %q", ErrTokenInvalid, t.Header["alg"])
+		}
+		// Reject tokens that did not declare a kid or declared one we do not
+		// recognise. Empty expectedKID disables the check (defence in depth
+		// for callers that legitimately sign without a kid header).
+		if expectedKID != "" {
+			kid, _ := t.Header["kid"].(string)
+			if kid != expectedKID {
+				return nil, fmt.Errorf("%w: unexpected kid %q", ErrTokenInvalid, kid)
+			}
 		}
 		return pub, nil
 	}

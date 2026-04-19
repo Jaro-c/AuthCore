@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,41 @@ import (
 // refreshSecretLen is the number of raw bytes in a refresh secret.
 // 32 bytes gives 256 bits of entropy, matching the HMAC-SHA256 key size.
 const refreshSecretLen = 32
+
+// maxKeyFileSize caps the bytes the key loader will read from disk. A healthy
+// Ed25519 PEM file is ~200 bytes and a hex-encoded HMAC secret is 65 bytes,
+// so 4 KiB leaves comfortable headroom for PEM comment headers without ever
+// reading an oversized file. The cap protects startup from a corrupted or
+// attacker-replaced key file that would otherwise be loaded whole into memory.
+const maxKeyFileSize = 4 * 1024
+
+// readCapped reads up to maxKeyFileSize bytes from path and returns an error
+// if the file is larger. It replaces os.ReadFile at every key-loading site.
+func readCapped(path string) ([]byte, error) {
+	// #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	// Stat first so an obviously oversized file is rejected before any read.
+	if fi, err := f.Stat(); err == nil && fi.Size() > maxKeyFileSize {
+		return nil, fmt.Errorf("file %q is %d bytes, exceeds %d-byte cap", path, fi.Size(), maxKeyFileSize)
+	}
+
+	// Read at most maxKeyFileSize+1 bytes. If the +1 byte actually arrives,
+	// the file streams more than the stat reported (symlink race, pipe-like
+	// path) and the loader refuses it.
+	data, err := io.ReadAll(io.LimitReader(f, maxKeyFileSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxKeyFileSize {
+		return nil, fmt.Errorf("file %q exceeds %d-byte cap", path, maxKeyFileSize)
+	}
+	return data, nil
+}
 
 // ----- Ed25519 key pair -------------------------------------------------------
 
@@ -111,9 +147,7 @@ func writePublicKey(path string, key ed25519.PublicKey) error {
 
 // readPrivateKey parses a PKCS#8 PEM file and returns the Ed25519 private key.
 func readPrivateKey(path string) (ed25519.PrivateKey, error) {
-	// path is built from Config.KeysDir and a fixed filename, both under the
-	// operator's control. Not reachable from user input.
-	data, err := os.ReadFile(path) // #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
+	data, err := readCapped(path)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +168,7 @@ func readPrivateKey(path string) (ed25519.PrivateKey, error) {
 
 // readPublicKey parses a PKIX PEM file and returns the Ed25519 public key.
 func readPublicKey(path string) (ed25519.PublicKey, error) {
-	// path is built from Config.KeysDir and a fixed filename, both under the
-	// operator's control. Not reachable from user input.
-	data, err := os.ReadFile(path) // #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
+	data, err := readCapped(path)
 	if err != nil {
 		return nil, err
 	}
@@ -188,9 +220,7 @@ func generateAndSaveRefreshSecret(path string) ([]byte, error) {
 
 // loadRefreshSecret reads, validates, and hex-decodes the secret file.
 func loadRefreshSecret(path string) ([]byte, error) {
-	// path is built from Config.KeysDir and a fixed filename, both under the
-	// operator's control. Not reachable from user input.
-	data, err := os.ReadFile(path) // #nosec G304 -- path derived from trusted config.KeysDir and fixed filename, not user input
+	data, err := readCapped(path)
 	if err != nil {
 		return nil, fmt.Errorf("read refresh secret from %q: %w", path, err)
 	}
