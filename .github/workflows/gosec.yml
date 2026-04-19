@@ -19,14 +19,14 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Run gosec
-        uses: securego/gosec@master
+        uses: securego/gosec@64b97151cd7b978abdf8d2f1159a4e9096a12c2b # master
         with:
           args: '-fmt sarif -out results.sarif -no-fail ./...'
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a # v3
         with:
           sarif_file: results.sarif
