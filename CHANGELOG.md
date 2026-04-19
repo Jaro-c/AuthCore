@@ -7,6 +7,48 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.1] - 2026-04-19
+
+Security-hardening release. No public API changes; existing callers upgrade
+without modification. Two verification paths are now stricter, which can
+reject previously-accepted tokens and stored hashes that were produced under
+inconsistent configuration.
+
+### Security
+
+#### JWT module (`github.com/Jaro-c/authcore/auth/jwt`)
+- `VerifyAccessToken` and `RotateTokens` now enforce the `iss` claim against
+  `Config.Issuer`, mirroring the existing `aud` check. Previously, a token
+  signed by a trusted key was accepted regardless of which service issued it
+  — a cross-service key-reuse gap. Tokens with a mismatched issuer now return
+  `ErrTokenInvalid`.
+
+#### Password module (`github.com/Jaro-c/authcore/auth/password`)
+- `parsePHC` now bounds the `m=` (memory), `t=` (iterations), and `p=`
+  (parallelism) parameters read from the stored hash to the same ceilings
+  `validateConfig` enforces at construction time. A corrupted or attacker-
+  supplied hash of the form `$argon2id$v=19$m=4000000000,…` previously caused
+  `argon2.IDKey` to attempt a multi-TiB allocation and crash the process on
+  `Verify`; such hashes now return `ErrInvalidHash` before any key derivation.
+
+### Hardening
+
+#### JWT module
+- `verifyAccessToken` / `verifyRefreshToken` internal helpers take
+  `audience string` (previously `[]string`). The module snapshots
+  `Config.Audience[0]` into a private `primaryAudience` field at
+  construction, making the verify path immune to post-init mutation of the
+  caller's audience slice.
+
+### Fixed
+
+- `module.go` constructor convention comment now lists the actual
+  per-module signatures (`jwt.New[T]`, variadic `password.New`, variadic
+  `email.New`, `username.New(p)` only) instead of the outdated
+  one-size-fits-all form.
+
+---
+
 ## [1.0.0] - 2026-03-14
 
 First stable release. The public API is now frozen under the guarantees of

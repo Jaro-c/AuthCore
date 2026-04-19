@@ -177,7 +177,8 @@ func (j *JWT[T]) issueTokens(subject, jti string, extra T) (*TokenPair, error) {
 // On failure it returns one of the following sentinel errors:
 //
 //	jwt.ErrTokenExpired   — exp claim is in the past
-//	jwt.ErrTokenInvalid   — signature invalid or unsupported algorithm
+//	jwt.ErrTokenInvalid   — signature invalid, unsupported algorithm,
+//	                        or iss/aud claim does not match Config
 //	jwt.ErrTokenMalformed — not a valid three-part JWT string
 //	jwt.ErrWrongTokenType — token is a refresh token, not an access token
 //

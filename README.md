@@ -268,7 +268,7 @@ switch {
 case errors.Is(err, jwt.ErrTokenExpired):
     // 401 — client should refresh
 case errors.Is(err, jwt.ErrTokenInvalid):
-    // 401 — tampered or wrong key
+    // 401 — tampered, wrong key, or issuer/audience mismatch
 case errors.Is(err, jwt.ErrTokenMalformed):
     // 400 — not a JWT at all
 case err != nil:
@@ -279,6 +279,9 @@ fmt.Println(claims.Subject)    // UUID v7 user ID
 fmt.Println(claims.Extra.Role) // "admin" — your custom claims
 fmt.Println(claims.ExpiresAt)  // time.Time
 ```
+
+> [!NOTE]
+> Verification enforces both **`iss` (issuer)** and **`aud` (audience)** match the values in `jwt.Config`. A token signed by a trusted key but minted for a different service is rejected with `ErrTokenInvalid` — this is the defense against accidental key reuse across services.
 
 ---
 
@@ -407,7 +410,9 @@ case !ok:
 
 Comparison is **constant-time** (`crypto/subtle`) — timing attacks are not
 possible. Parameters are always read from the stored hash, never from the
-current module config.
+current module config, and **bounded to the same safe range** (`Memory` 8 MiB – 4 GiB,
+`Iterations` ≤ 20, `Parallelism` ≥ 1) so a corrupted or malicious stored hash
+cannot force `argon2.IDKey` into an unbounded memory allocation.
 
 ---
 
@@ -881,7 +886,7 @@ In tests, inject a stub `Provider` that returns fixed keys — no disk I/O requi
 |---|---|
 | `jwt.ErrInvalidConfig` | `jwt.Config` validation failed |
 | `jwt.ErrTokenExpired` | `exp` claim is in the past (beyond leeway) |
-| `jwt.ErrTokenInvalid` | signature invalid or unsupported algorithm |
+| `jwt.ErrTokenInvalid` | signature invalid, unsupported algorithm, or `iss` / `aud` claim does not match `Config` |
 | `jwt.ErrTokenMalformed` | not a valid three-part JWT string |
 | `jwt.ErrWrongTokenType` | access token passed where refresh expected, or vice-versa |
 | `jwt.ErrInvalidSubject` | subject passed to `CreateTokens` is not a UUID v7 |

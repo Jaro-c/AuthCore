@@ -233,12 +233,18 @@ func (p *Password) Hash(plaintext string) (string, error) {
 //
 // The Argon2id parameters (Memory, Iterations, Parallelism) are read from
 // phcHash itself, so stored hashes remain valid even if the module's Config
-// is updated after they were created.
+// is updated after they were created. The parsed parameters are bounded to
+// the same ceilings validateConfig enforces at construction, so a corrupted
+// or malicious stored hash cannot force argon2.IDKey into an unbounded
+// memory allocation.
 //
 // The comparison is performed in constant time to prevent timing attacks.
 //
+// Returns ErrInvalidHash when phcHash is malformed, uses a non-Argon2id
+// algorithm, or carries parameters outside the supported range.
+//
 //	ok, err := pwdMod.Verify(submittedPassword, storedHash)
-//	if errors.Is(err, password.ErrInvalidHash) { ... } // hash is malformed
+//	if errors.Is(err, password.ErrInvalidHash) { ... } // hash is malformed or out of range
 //	if !ok { return http.StatusUnauthorized }
 func (p *Password) Verify(plaintext, phcHash string) (bool, error) {
 	// Extract the Argon2id parameters and salt embedded in the stored hash.
