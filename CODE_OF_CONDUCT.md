@@ -46,9 +46,21 @@ officially representing the project in public spaces.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported via
-[GitHub private vulnerability reporting](https://github.com/Jaro-c/authcore/security/advisories/new)
-or by opening a confidential discussion with the maintainers.
+Instances of abusive, harassing, or otherwise unacceptable behavior should be
+reported **confidentially** to the maintainers. Two channels are available:
+
+- **Preferred:** contact the maintainer directly using the address listed on the
+  [maintainer's GitHub profile](https://github.com/Jaro-c). This keeps
+  Code-of-Conduct reports entirely separate from the repository's issue tracker
+  and security-advisory workflow.
+- **Fallback:** if you cannot reach out privately, you may open a
+  [GitHub private advisory](https://github.com/Jaro-c/authcore/security/advisories/new).
+  Despite its "security" framing, this is the repository's only built-in
+  private communication channel; note clearly in the title that the report is
+  a Code-of-Conduct matter rather than a vulnerability.
+
+Do not open a public issue or discussion for Code-of-Conduct reports — that
+exposes the reporter and the accused before the report can be triaged.
 
 All reports will be reviewed and investigated promptly and fairly.
 Community leaders are obligated to respect the privacy and security of the reporter.

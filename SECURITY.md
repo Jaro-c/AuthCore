@@ -2,14 +2,16 @@
 
 ## Supported Versions
 
-Only the latest published version of authcore receives security fixes.
+Security fixes are backported to the latest minor line of each supported major version. Older lines are expected to upgrade to the current minor.
 
-| Version | Supported |
-|---------|-----------|
-| latest  | ✅        |
-| < latest| ❌        |
+| Major line | Supported | Notes |
+|------------|-----------|-------|
+| `v1.x`     | ✅        | Current. Latest minor receives all security fixes. |
+| `< v1.0`   | ❌        | Pre-release; no longer supported. |
 
-Once the library reaches a stable `v1.0.0`, a formal long-term support window will be defined here.
+Upgrading within `v1.x` is non-breaking by semver guarantee. Patch releases may tighten validation (e.g. `v1.2.0` added TTL caps, `kid` matching, and other defence-in-depth checks) — review the [CHANGELOG](CHANGELOG.md) for behaviour that is now stricter.
+
+A formal long-term support window for specific minor lines will be defined if usage patterns make it necessary; until then, always upgrade to the latest tagged `v1.x` release.
 
 ## Reporting a Vulnerability
 

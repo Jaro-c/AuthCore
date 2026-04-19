@@ -27,8 +27,16 @@ type Config struct {
 	// Override this with your own service URL or identifier (e.g. "https://auth.example.com").
 	Issuer string
 
-	// Audience is the list of intended recipients embedded in the "aud" claim of every token.
-	// Verifiers use this to confirm that a token was issued for their service.
+	// Audience is the list of intended recipients embedded in the "aud" claim
+	// of every token issued by this module. Verifiers use this to confirm
+	// that a token was issued for their service.
+	//
+	// On verification, only the **first** value (Audience[0]) is enforced.
+	// It is snapshotted into a private field at New() time so that a caller
+	// who later mutates the slice they passed in cannot panic or weaken the
+	// verification path. If you need to accept tokens for multiple audiences
+	// today, run one JWT module per audience rather than widening this slice.
+	//
 	// Defaults to ["github.com/Jaro-c/authcore"].
 	// Override this with your own service identifiers (e.g. ["https://api.example.com"]).
 	Audience []string
