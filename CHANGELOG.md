@@ -7,6 +7,44 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.2.1] - 2026-04-19
+
+Documentation-only release. No code behaviour changes; safe drop-in upgrade.
+
+### Fixed
+
+- **`README.md` — API Stability section** no longer claims the library is
+  pre-v1 ("v0.x (current)"). The versioning policy now describes the real
+  v1.x guarantees and references the v1.2.0 defence-in-depth additions.
+- **`SECURITY.md` — Supported Versions** no longer frames "stable v1.0.0"
+  as a future event. Current v1.x support is documented with a non-
+  breaking-upgrade guarantee and a pointer to the CHANGELOG for
+  validation-tightening releases.
+- **`CODE_OF_CONDUCT.md` — Enforcement** Code-of-Conduct reports used to be
+  routed to GitHub's *security* advisory page. They are now routed to the
+  maintainer directly; the private advisory is retained only as a
+  clearly-flagged fallback for reporters who cannot contact the
+  maintainer privately any other way.
+
+### Changed — godoc clarifications
+
+- **`auth/jwt/config.go` — `Audience`** field docs now state explicitly
+  that only the first value is enforced on verification, and that it is
+  snapshotted into a private field at `New()` so callers who later mutate
+  the slice cannot weaken the verifier (behaviour introduced in v1.2.0).
+- **`auth/password/password.go` — `Verify`** docs now list the exact PHC
+  parameter ranges the function enforces (Memory 8 MiB – 4 GiB,
+  Iterations 1 – 20, Parallelism ≥ 1) instead of the vague "supported
+  range" language.
+- **`internal/keymanager` package doc** now documents the 4 KiB key-file
+  size cap and its rationale (previously visible only in `generate.go`).
+
+Tests for the corresponding behaviour in v1.2.0 and the new edge-case
+coverage landed earlier in this release series; no new tests ship with
+v1.2.1.
+
+---
+
 ## [1.2.0] - 2026-04-19
 
 Defence-in-depth release. Five complementary validations close the last
