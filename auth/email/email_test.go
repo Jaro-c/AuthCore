@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,6 +177,30 @@ func TestValidateAndNormalize_normalizes(t *testing.T) {
 	}
 	if got != "user@example.com" {
 		t.Errorf("got %q, want %q", got, "user@example.com")
+	}
+}
+
+func TestValidateAndNormalize_idnSubdomainEachLabelConverted(t *testing.T) {
+	// When a multi-label IDN domain is supplied, every Unicode label must
+	// be converted to its punycode form, not just the rightmost one.
+	got, err := newMod(t).ValidateAndNormalize("user@süd.münchen.de")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "user@xn--sd-xka.xn--mnchen-3ya.de"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestValidateAndNormalize_idnWithOverlongLabelRejected(t *testing.T) {
+	// idna.Lookup caps a single label at 63 characters. When ToASCII cannot
+	// produce a valid ASCII form, normalize falls back to the raw input and
+	// the downstream validator rejects it with ErrInvalidEmail.
+	overlongLabel := strings.Repeat("ä", 60) // ~120 bytes UTF-8, punycode expands further → >63
+	_, err := newMod(t).ValidateAndNormalize("user@" + overlongLabel + ".com")
+	if !errors.Is(err, ErrInvalidEmail) {
+		t.Errorf("expected ErrInvalidEmail for overlong IDN label, got %v", err)
 	}
 }
 

@@ -329,6 +329,28 @@ func TestValidatePolicy_weakPassword(t *testing.T) {
 	}
 }
 
+func TestValidatePolicy_nfcAndNfdFormsAgree(t *testing.T) {
+	p, _ := New(fakeProvider{})
+
+	// Same logical password in NFC (precomposed "é") and NFD (base "e" +
+	// combining acute). Both byte sequences represent the same visual
+	// password, so ValidatePolicy must treat them identically — accepting
+	// or rejecting both the same way. Before NFC normalisation was added,
+	// byte-level length counts and codepoint-level iteration could diverge
+	// on these two forms.
+	nfc := "Contraseña-Seguro9!"       // "ñ" as single codepoint U+00F1
+	nfd := "Contrasen\u0303a-Seguro9!" // "ñ" as "n" + combining tilde U+0303
+
+	if nfc == nfd {
+		t.Fatal("test setup error: NFC and NFD forms are identical")
+	}
+	errNFC := p.ValidatePolicy(nfc)
+	errNFD := p.ValidatePolicy(nfd)
+	if (errNFC == nil) != (errNFD == nil) {
+		t.Errorf("ValidatePolicy disagrees between NFC and NFD forms: NFC=%v, NFD=%v", errNFC, errNFD)
+	}
+}
+
 // ---- parsePHC() -------------------------------------------------------------
 
 func TestParsePHC_wrongSegmentCount(t *testing.T) {

@@ -119,6 +119,28 @@ func TestNew_negativeTTLReturnsError(t *testing.T) {
 	}
 }
 
+func TestNew_accessTTLExactlyAtCeilingAccepted(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AccessTokenTTL = 24 * time.Hour        // exactly at the cap
+	cfg.RefreshTokenTTL = 365*24*time.Hour - 1 // any value above access works; keep below its own cap
+
+	_, err := New[struct{}](newFakeProvider(t), cfg)
+	if err != nil {
+		t.Errorf("TTL exactly at ceiling must be accepted, got %v", err)
+	}
+}
+
+func TestNew_refreshTTLExactlyAtCeilingAccepted(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AccessTokenTTL = 15 * time.Minute
+	cfg.RefreshTokenTTL = 365 * 24 * time.Hour // exactly at the cap
+
+	_, err := New[struct{}](newFakeProvider(t), cfg)
+	if err != nil {
+		t.Errorf("refresh TTL exactly at ceiling must be accepted, got %v", err)
+	}
+}
+
 func TestNew_accessTTLAboveCeilingReturnsError(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.AccessTokenTTL = 48 * time.Hour // above 24 h ceiling
@@ -405,6 +427,49 @@ func TestVerifyAccessToken_wrongIssuerRejectsToken(t *testing.T) {
 	_, err := j2.VerifyAccessToken(pair.AccessToken)
 	if !errors.Is(err, ErrTokenInvalid) {
 		t.Errorf("expected ErrTokenInvalid when issuer does not match, got %v", err)
+	}
+}
+
+func TestVerifyAccessToken_missingKidRejectsToken(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+
+	// An attacker may try to strip the kid header entirely, betting that
+	// the verifier trusts the (single) configured public key regardless.
+	// The verifier must reject tokens whose kid does not match, which
+	// includes tokens where kid is absent.
+	claims := newAccessClaims(j.cfg.Issuer, testSubject, "019600ab-0000-7000-8000-000000000002", j.cfg.Audience, struct{}{}, epoch, j.cfg.AccessTokenTTL)
+	claims.Type = tokenTypeAccess
+	token := gjwt.NewWithClaims(gjwt.SigningMethodEdDSA, claims)
+	// Deliberately do not set token.Header["kid"].
+	stripped, err := token.SignedString(j.priv)
+	if err != nil {
+		t.Fatalf("sign kid-less token: %v", err)
+	}
+
+	_, err = j.VerifyAccessToken(stripped)
+	if !errors.Is(err, ErrTokenInvalid) {
+		t.Errorf("expected ErrTokenInvalid for missing kid, got %v", err)
+	}
+}
+
+func TestRotateTokens_unknownKidRejectsRefreshToken(t *testing.T) {
+	j := newTestJWT[struct{}](t, newFakeProvider(t), DefaultConfig())
+
+	// Mirror of the access-token kid check but on the rotation path. A
+	// refresh token with a kid the module does not recognise must be
+	// rejected before it is exchanged for a fresh pair.
+	claims := newRefreshClaims(j.cfg.Issuer, testSubject, "019600ab-0000-7000-8000-000000000003", j.cfg.Audience, epoch, j.cfg.RefreshTokenTTL)
+	claims.Type = tokenTypeRefresh
+	token := gjwt.NewWithClaims(gjwt.SigningMethodEdDSA, claims)
+	token.Header["kid"] = "attacker-controlled-kid"
+	tampered, err := token.SignedString(j.priv)
+	if err != nil {
+		t.Fatalf("sign tampered refresh token: %v", err)
+	}
+
+	_, err = j.RotateTokens(tampered, struct{}{})
+	if !errors.Is(err, ErrTokenInvalid) {
+		t.Errorf("expected ErrTokenInvalid for unknown kid on refresh, got %v", err)
 	}
 }
 

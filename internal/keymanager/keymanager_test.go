@@ -51,6 +51,41 @@ func TestNew_oversizedKeyFileRejected(t *testing.T) {
 	}
 }
 
+func TestNew_oversizedPublicKeyFileRejected(t *testing.T) {
+	// Regression guard for the public-key read path. Both key files must
+	// be size-capped; if only the private side is checked an attacker who
+	// can swap the public file still breaks startup.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ed25519_private.pem"), []byte("fake-but-small"), 0600); err != nil {
+		t.Fatalf("seed private key: %v", err)
+	}
+	oversized := make([]byte, 100*1024)
+	if err := os.WriteFile(filepath.Join(dir, "ed25519_public.pem"), oversized, 0644); err != nil {
+		t.Fatalf("seed oversized public key: %v", err)
+	}
+
+	_, err := keymanager.New(dir, testLogger{t})
+	if err == nil {
+		t.Fatal("expected error when public key file exceeds size cap, got nil")
+	}
+}
+
+func TestNew_oversizedRefreshSecretRejected(t *testing.T) {
+	// The refresh secret loader shares the same capped reader. A ~100 KiB
+	// secret file must be refused before it is hex-decoded.
+	dir := t.TempDir()
+	// Let the key-pair step succeed by letting New() generate fresh keys.
+	oversized := make([]byte, 100*1024)
+	if err := os.WriteFile(filepath.Join(dir, "refresh_secret.key"), oversized, 0600); err != nil {
+		t.Fatalf("seed oversized refresh secret: %v", err)
+	}
+
+	_, err := keymanager.New(dir, testLogger{t})
+	if err == nil {
+		t.Fatal("expected error when refresh secret file exceeds size cap, got nil")
+	}
+}
+
 func TestNew_generatesAllFiles(t *testing.T) {
 	dir := t.TempDir()
 	_, err := keymanager.New(dir, testLogger{t})
