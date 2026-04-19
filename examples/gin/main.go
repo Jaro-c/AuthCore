@@ -133,7 +133,9 @@ func main() {
 		ok, err := pwdMod.Verify(req.Password, u.passwordHash)
 		if err != nil {
 			// ErrInvalidHash is INTERNAL — log it, return generic 401.
-			log.Printf("verify error for %s: %v", req.Email, err)
+			// %q quotes and escapes control characters so a hostile email
+			// containing newlines cannot forge extra log entries.
+			log.Printf("verify error for %q: %v", req.Email, err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return
 		}
