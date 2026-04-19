@@ -31,11 +31,14 @@ Reporters will be credited in the release notes unless you prefer to remain anon
 
 ## Scope
 
-This policy covers the `github.com/Jaro-c/authcore` module and all sub-packages published under this repository:
+This policy covers the `github.com/Jaro-c/authcore` module and all published sub-packages in this repository, including:
 
 - `auth/jwt`
-- `auth/apikey` *(planned)*
-- `auth/oauth` *(planned)*
+- `auth/password`
+- `auth/email`
+- `auth/username`
+
+Planned modules listed in the README roadmap join this scope as soon as they are published.
 
 Third-party dependencies are out of scope — please report those issues to their respective maintainers.
 

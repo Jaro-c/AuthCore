@@ -4,6 +4,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/Jaro-c/authcore)](https://goreportcard.com/report/github.com/Jaro-c/authcore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/Jaro-c/authcore/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaro-c/authcore/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Jaro-c/authcore/branch/main/graph/badge.svg)](https://codecov.io/gh/Jaro-c/authcore)
+[![CodeQL](https://github.com/Jaro-c/authcore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Jaro-c/authcore/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jaro-c/authcore/badge)](https://scorecard.dev/viewer/?uri=github.com/Jaro-c/authcore)
 
 **A modular, production-ready authentication library for Go 1.26+.**
 
@@ -750,6 +753,17 @@ pwd, _ := password.New(auth, password.Config{
 - [ ] `auth/apikey` — opaque key generation with pluggable store interface *(future)*
 - [ ] `auth/oauth` — OAuth 2.0 / OIDC provider integration *(future)*
 - [ ] Key rotation helpers — zero-downtime rotation via `kid` header *(future)*
+
+---
+
+## API Stability
+
+authcore follows [Semantic Versioning](https://semver.org).
+
+- **`v0.x` (current)** — the public API may introduce breaking changes between minor releases while the library matures. Pin your dependency with `go.sum` and review release notes before upgrading.
+- **`v1.0.0` (future)** — once published, the public API is covered by compatibility guarantees. Breaking changes will only ship in a new major version.
+
+Internal packages (`internal/…`) carry no compatibility guarantees at any version and must not be imported from outside the module.
 
 ---
 
