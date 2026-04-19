@@ -93,9 +93,11 @@ func signToken(claims gjwt.Claims, key ed25519.PrivateKey, kid string) (string, 
 
 // verifyAccessToken validates the compact JWT string and returns the decoded access claims.
 // now is injected to allow deterministic testing via clock.Fixed.
-// audience is validated: the token must contain at least the first configured audience value.
+// audience is the expected "aud" value the token must contain; captured at
+// construction time so post-construction mutation of the config slice cannot
+// panic this path.
 // leeway is added to the expiration window to tolerate small clock skew between servers.
-func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.Time, audience []string, leeway time.Duration) (*accessClaims[T], error) {
+func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.Time, audience string, leeway time.Duration) (*accessClaims[T], error) {
 	var c accessClaims[T]
 	_, err := gjwt.ParseWithClaims(
 		tokenStr, &c,
@@ -103,7 +105,7 @@ func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.T
 		gjwt.WithTimeFunc(func() time.Time { return now }), // inject clock so tests can freeze time
 		gjwt.WithExpirationRequired(),                      // reject tokens without an exp claim
 		gjwt.WithIssuedAt(),                                // reject tokens with iat in the future
-		gjwt.WithAudience(audience[0]),                     // token must contain this audience value
+		gjwt.WithAudience(audience),                        // token must contain this audience value
 		gjwt.WithLeeway(leeway),                            // tolerate small clock drift between servers
 	)
 	if err != nil {
@@ -113,9 +115,11 @@ func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.T
 }
 
 // verifyRefreshToken validates the compact JWT string and returns the decoded refresh claims.
-// audience is validated: the token must contain at least the first configured audience value.
+// audience is the expected "aud" value the token must contain; captured at
+// construction time so post-construction mutation of the config slice cannot
+// panic this path.
 // leeway is added to the expiration window to tolerate small clock skew between servers.
-func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, now time.Time, audience []string, leeway time.Duration) (*refreshClaims, error) {
+func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, now time.Time, audience string, leeway time.Duration) (*refreshClaims, error) {
 	var c refreshClaims
 	_, err := gjwt.ParseWithClaims(
 		tokenStr, &c,
@@ -123,7 +127,7 @@ func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, now time.Time, a
 		gjwt.WithTimeFunc(func() time.Time { return now }), // inject clock so tests can freeze time
 		gjwt.WithExpirationRequired(),                      // reject tokens without an exp claim
 		gjwt.WithIssuedAt(),                                // reject tokens with iat in the future
-		gjwt.WithAudience(audience[0]),                     // token must contain this audience value
+		gjwt.WithAudience(audience),                        // token must contain this audience value
 		gjwt.WithLeeway(leeway),                            // tolerate small clock drift between servers
 	)
 	if err != nil {

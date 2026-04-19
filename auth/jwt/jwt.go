@@ -56,13 +56,14 @@ var _ authcore.Module = (*JWT[struct{}])(nil)
 // Construct one instance at application startup using New and share it
 // across all goroutines. JWT is safe for concurrent use after construction.
 type JWT[T any] struct {
-	cfg    Config
-	log    authcore.Logger
-	priv   ed25519.PrivateKey
-	pub    ed25519.PublicKey
-	secret []byte      // HMAC-SHA256 key for hashing refresh tokens
-	kid    string      // JOSE "kid" header value, derived from the public key
-	clock  clock.Clock // injected; replaced by clock.Fixed in tests
+	cfg             Config
+	log             authcore.Logger
+	priv            ed25519.PrivateKey
+	pub             ed25519.PublicKey
+	secret          []byte      // HMAC-SHA256 key for hashing refresh tokens
+	kid             string      // JOSE "kid" header value, derived from the public key
+	clock           clock.Clock // injected; replaced by clock.Fixed in tests
+	primaryAudience string      // cfg.Audience[0] snapshotted at construction; immune to post-init mutation
 }
 
 // New creates and returns a JWT module.
@@ -83,13 +84,14 @@ func New[T any](p authcore.Provider, cfg Config) (*JWT[T], error) {
 	}
 
 	j := &JWT[T]{
-		cfg:    cfg,
-		log:    p.Logger(),
-		priv:   p.Keys().PrivateKey(),
-		pub:    p.Keys().PublicKey(),
-		secret: p.Keys().RefreshSecret(),
-		kid:    p.Keys().KeyID(),
-		clock:  clock.New(p.Config().Timezone),
+		cfg:             cfg,
+		log:             p.Logger(),
+		priv:            p.Keys().PrivateKey(),
+		pub:             p.Keys().PublicKey(),
+		secret:          p.Keys().RefreshSecret(),
+		kid:             p.Keys().KeyID(),
+		clock:           clock.New(p.Config().Timezone),
+		primaryAudience: cfg.Audience[0], // validateConfig guarantees len >= 1
 	}
 
 	j.log.Info("jwt: module initialised (issuer=%s, access_ttl=%s, refresh_ttl=%s)",
@@ -184,7 +186,7 @@ func (j *JWT[T]) issueTokens(subject, jti string, extra T) (*TokenPair, error) {
 //	claims, err := jwtMod.VerifyAccessToken(token)
 //	if errors.Is(err, jwt.ErrTokenExpired) { ... }
 func (j *JWT[T]) VerifyAccessToken(token string) (*Claims[T], error) {
-	c, err := verifyAccessToken[T](token, j.pub, j.clock.Now(), j.cfg.Audience, j.cfg.ClockSkewLeeway)
+	c, err := verifyAccessToken[T](token, j.pub, j.clock.Now(), j.primaryAudience, j.cfg.ClockSkewLeeway)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +246,7 @@ func (j *JWT[T]) VerifyRefreshTokenHash(token, storedHash string) bool {
 //
 // Returns the same errors as VerifyAccessToken.
 func (j *JWT[T]) RotateTokens(refreshToken string, extra T) (*TokenPair, error) {
-	c, err := verifyRefreshToken(refreshToken, j.pub, j.clock.Now(), j.cfg.Audience, j.cfg.ClockSkewLeeway)
+	c, err := verifyRefreshToken(refreshToken, j.pub, j.clock.Now(), j.primaryAudience, j.cfg.ClockSkewLeeway)
 	if err != nil {
 		return nil, err
 	}
