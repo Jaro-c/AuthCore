@@ -743,6 +743,14 @@ pwd, _ := password.New(auth, password.Config{
 
 ---
 
+## Coverage
+
+[![Sunburst](https://codecov.io/github/Jaro-c/AuthCore/graphs/sunburst.svg?token=YXE6LDJFCQ)](https://app.codecov.io/gh/Jaro-c/AuthCore)
+
+Each ring is a directory; each slice is a file. Greener wedges are better covered. Click through for the full per-line report on Codecov.
+
+---
+
 ## Roadmap
 
 - [x] Core library — key management, logger, clock, Provider interface
