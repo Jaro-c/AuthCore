@@ -36,6 +36,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Idempotent: if the maintainer already published the release
+          # manually (with curated notes from CHANGELOG.md), skip the
+          # auto-generated fallback. Otherwise create it so tags pushed
+          # directly never lack a published release.
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists — leaving the maintainer-curated notes in place."
+            exit 0
+          fi
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
