@@ -12,6 +12,12 @@
 // On subsequent calls the existing files are loaded and validated; no new
 // material is generated unless a file is missing.
 //
+// Key-file loading is size-capped at 4 KiB. A healthy Ed25519 PEM is ~200
+// bytes and a hex-encoded HMAC secret is 65 bytes, so the cap leaves
+// comfortable headroom for PEM comment headers while refusing a corrupted
+// or attacker-replaced key file that would otherwise be loaded whole into
+// memory before PEM decoding rejects it.
+//
 // The KeyManager is read-only after construction and safe for concurrent use.
 package keymanager
 

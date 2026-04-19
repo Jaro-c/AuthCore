@@ -250,10 +250,15 @@ func (p *Password) Hash(plaintext string) (string, error) {
 // or malicious stored hash cannot force argon2.IDKey into an unbounded
 // memory allocation.
 //
+// Supported parameter ranges (mirroring Config validation):
+//   - Memory:      8 MiB – 4 GiB (8192 – 4194304 KiB)
+//   - Iterations:  1 – 20
+//   - Parallelism: ≥ 1
+//
 // The comparison is performed in constant time to prevent timing attacks.
 //
 // Returns ErrInvalidHash when phcHash is malformed, uses a non-Argon2id
-// algorithm, or carries parameters outside the supported range.
+// algorithm, or carries parameters outside the ranges above.
 //
 //	ok, err := pwdMod.Verify(submittedPassword, storedHash)
 //	if errors.Is(err, password.ErrInvalidHash) { ... } // hash is malformed or out of range
