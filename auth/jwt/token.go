@@ -99,12 +99,12 @@ func verifyAccessToken[T any](tokenStr string, pub ed25519.PublicKey, now time.T
 	var c accessClaims[T]
 	_, err := gjwt.ParseWithClaims(
 		tokenStr, &c,
-		eddsaKeyFunc(pub),                                   // enforce EdDSA alg; rejects HS256/RS256 confusion attacks
-		gjwt.WithTimeFunc(func() time.Time { return now }),  // inject clock so tests can freeze time
-		gjwt.WithExpirationRequired(),                       // reject tokens without an exp claim
-		gjwt.WithIssuedAt(),                                 // reject tokens with iat in the future
-		gjwt.WithAudience(audience[0]),                      // token must contain this audience value
-		gjwt.WithLeeway(leeway),                             // tolerate small clock drift between servers
+		eddsaKeyFunc(pub), // enforce EdDSA alg; rejects HS256/RS256 confusion attacks
+		gjwt.WithTimeFunc(func() time.Time { return now }), // inject clock so tests can freeze time
+		gjwt.WithExpirationRequired(),                      // reject tokens without an exp claim
+		gjwt.WithIssuedAt(),                                // reject tokens with iat in the future
+		gjwt.WithAudience(audience[0]),                     // token must contain this audience value
+		gjwt.WithLeeway(leeway),                            // tolerate small clock drift between servers
 	)
 	if err != nil {
 		return nil, mapJWTError(err)
@@ -119,12 +119,12 @@ func verifyRefreshToken(tokenStr string, pub ed25519.PublicKey, now time.Time, a
 	var c refreshClaims
 	_, err := gjwt.ParseWithClaims(
 		tokenStr, &c,
-		eddsaKeyFunc(pub),                                   // enforce EdDSA alg; rejects HS256/RS256 confusion attacks
-		gjwt.WithTimeFunc(func() time.Time { return now }),  // inject clock so tests can freeze time
-		gjwt.WithExpirationRequired(),                       // reject tokens without an exp claim
-		gjwt.WithIssuedAt(),                                 // reject tokens with iat in the future
-		gjwt.WithAudience(audience[0]),                      // token must contain this audience value
-		gjwt.WithLeeway(leeway),                             // tolerate small clock drift between servers
+		eddsaKeyFunc(pub), // enforce EdDSA alg; rejects HS256/RS256 confusion attacks
+		gjwt.WithTimeFunc(func() time.Time { return now }), // inject clock so tests can freeze time
+		gjwt.WithExpirationRequired(),                      // reject tokens without an exp claim
+		gjwt.WithIssuedAt(),                                // reject tokens with iat in the future
+		gjwt.WithAudience(audience[0]),                     // token must contain this audience value
+		gjwt.WithLeeway(leeway),                            // tolerate small clock drift between servers
 	)
 	if err != nil {
 		return nil, mapJWTError(err)
@@ -183,7 +183,7 @@ func accessClaimsToClaims[T any](c *accessClaims[T]) *Claims[T] {
 		Issuer:    c.Issuer,
 		Audience:  []string(c.Audience),
 		TokenID:   c.ID,
-		IssuedAt:  iat.UTC(),  // normalise to UTC regardless of the server's local timezone
+		IssuedAt:  iat.UTC(), // normalise to UTC regardless of the server's local timezone
 		ExpiresAt: exp.UTC(),
 		Extra:     c.Extra,
 	}
@@ -199,7 +199,7 @@ func computeHMAC(token string, secret []byte) string {
 // generateJTI returns a UUID v7 string suitable for use as the "jti" claim.
 // The 48-bit timestamp comes from now; the remaining bits are cryptographically random.
 //
-// Format: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx (RFC 9562 §5.7)
+// Format: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx (RFC 9562 §5.7).
 func generateJTI(now time.Time) (string, error) {
 	ms := now.UnixMilli()
 

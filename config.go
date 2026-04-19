@@ -92,7 +92,7 @@ func validateKeysDir(dir string) error {
 	}
 	name := tmp.Name()
 	if err := tmp.Close(); err != nil {
-		os.Remove(name)
+		_ = os.Remove(name)
 		return fmt.Errorf("keys directory %q write check failed: %w", dir, err)
 	}
 	if err := os.Remove(name); err != nil {

@@ -105,7 +105,8 @@ func writePublicKey(path string, key ed25519.PublicKey) error {
 		return fmt.Errorf("marshal Ed25519 public key: %w", err)
 	}
 	block := &pem.Block{Type: "PUBLIC KEY", Bytes: der}
-	return os.WriteFile(path, pem.EncodeToMemory(block), 0644)
+	return os.WriteFile(path, pem.EncodeToMemory(block), 0644) //nolint:gosec // public key intended to be world-readable
+
 }
 
 // readPrivateKey parses a PKCS#8 PEM file and returns the Ed25519 private key.

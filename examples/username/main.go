@@ -38,16 +38,16 @@ func main() {
 	fmt.Println("=== ValidateAndNormalize ===")
 
 	cases := []string{
-		"  Alice_123  ",  // valid — normalized to lowercase + trimmed
-		"bob-dev",        // valid — hyphen in middle
-		"user99",         // valid
-		"ab",             // invalid — too short (min 3)
-		"-alice",         // invalid — starts with hyphen
-		"alice__bob",     // invalid — consecutive underscores
-		"alice@bob",      // invalid — @ not allowed
-		"admin",          // invalid — reserved name
-		"root",           // invalid — reserved name
-		"login",          // invalid — reserved name (would clash with URL route)
+		"  Alice_123  ", // valid — normalized to lowercase + trimmed
+		"bob-dev",       // valid — hyphen in middle
+		"user99",        // valid
+		"ab",            // invalid — too short (min 3)
+		"-alice",        // invalid — starts with hyphen
+		"alice__bob",    // invalid — consecutive underscores
+		"alice@bob",     // invalid — @ not allowed
+		"admin",         // invalid — reserved name
+		"root",          // invalid — reserved name
+		"login",         // invalid — reserved name (would clash with URL route)
 	}
 
 	for _, raw := range cases {
@@ -96,5 +96,5 @@ func tempDir() (string, func()) {
 	if err != nil {
 		log.Fatalf("create temp dir: %v", err)
 	}
-	return dir, func() { os.RemoveAll(dir) }
+	return dir, func() { _ = os.RemoveAll(dir) }
 }

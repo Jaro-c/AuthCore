@@ -9,7 +9,7 @@ import (
 
 func ExampleNew() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	cfg := authcore.DefaultConfig()
 	cfg.EnableLogs = false

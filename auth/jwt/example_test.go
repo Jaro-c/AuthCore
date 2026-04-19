@@ -15,7 +15,7 @@ type AppClaims struct {
 
 func ExampleNew() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, err := jwt.New[AppClaims](auth, jwt.DefaultConfig())
@@ -28,7 +28,7 @@ func ExampleNew() {
 
 func ExampleJWT_CreateTokens() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := jwt.New[AppClaims](auth, jwt.DefaultConfig())
@@ -44,7 +44,7 @@ func ExampleJWT_CreateTokens() {
 
 func ExampleJWT_VerifyAccessToken() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := jwt.New[AppClaims](auth, jwt.DefaultConfig())
@@ -67,7 +67,7 @@ func ExampleJWT_VerifyAccessToken() {
 
 func ExampleJWT_RotateTokens() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := jwt.New[AppClaims](auth, jwt.DefaultConfig())

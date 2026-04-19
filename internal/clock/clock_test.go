@@ -75,7 +75,7 @@ func TestFixed_alwaysReturnsTheSameTime(t *testing.T) {
 
 func TestFixed_implementsClock(t *testing.T) {
 	fixed := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	var clk clock.Clock = clock.Fixed(fixed)
+	var clk = clock.Fixed(fixed)
 
 	if !clk.Now().Equal(fixed) {
 		t.Errorf("Fixed clock Now() = %v, want %v", clk.Now(), fixed)

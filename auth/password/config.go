@@ -62,9 +62,9 @@ func applyDefaults(cfg Config) Config {
 }
 
 const (
-	minMemory     = 8 * 1024       // 8 MiB in KiB
+	minMemory     = 8 * 1024        // 8 MiB in KiB
 	maxMemory     = 4 * 1024 * 1024 // 4 GiB in KiB — prevents accidental DoS
-	maxIterations = 20             // beyond this, hashing takes tens of seconds
+	maxIterations = 20              // beyond this, hashing takes tens of seconds
 )
 
 // validateConfig returns an error if cfg contains invalid values.

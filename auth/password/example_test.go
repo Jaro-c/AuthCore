@@ -11,7 +11,7 @@ import (
 
 func ExampleNew() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, err := password.New(auth)
@@ -24,7 +24,7 @@ func ExampleNew() {
 
 func ExamplePassword_Hash() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := password.New(auth, password.Config{Memory: 8 * 1024, Iterations: 1, Parallelism: 1})
@@ -40,7 +40,7 @@ func ExamplePassword_Hash() {
 
 func ExamplePassword_Verify() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := password.New(auth, password.Config{Memory: 8 * 1024, Iterations: 1, Parallelism: 1})
@@ -53,7 +53,7 @@ func ExamplePassword_Verify() {
 
 func ExamplePassword_ValidatePolicy() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := password.New(auth)

@@ -11,7 +11,7 @@ import (
 
 func ExampleNew() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, err := username.New(auth)
@@ -24,7 +24,7 @@ func ExampleNew() {
 
 func ExampleUsername_ValidateAndNormalize() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := username.New(auth)
@@ -40,7 +40,7 @@ func ExampleUsername_ValidateAndNormalize() {
 
 func ExampleUsername_ValidateAndNormalize_reserved() {
 	dir, _ := os.MkdirTemp("", "authcore-example-")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	auth, _ := authcore.New(authcore.Config{EnableLogs: false, KeysDir: dir})
 	mod, _ := username.New(auth)

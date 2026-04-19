@@ -2,19 +2,18 @@ package email
 
 import "errors"
 
-// Sentinel errors returned by the email package.
-// Use errors.Is to check for these in calling code.
+// ErrInvalidEmail signals that an address failed RFC 5321/5322 validation.
 //
-// # Error safety
-//
-// ErrInvalidEmail is CLIENT-SAFE: the wrapped reason describes exactly which
-// rule failed and is suitable for returning in a 400 response:
+// CLIENT-SAFE: the wrapped reason describes exactly which rule failed and is
+// suitable for returning in a 400 response:
 //
 //	normalized, err := emailMod.ValidateAndNormalize(req.Email)
 //	if err != nil {
 //	    c.JSON(400, map[string]string{"error": errors.Unwrap(err).Error()})
 //	    return
 //	}
+//
+// Use errors.Is to check for this in calling code.
 var ErrInvalidEmail = errors.New("email: invalid address")
 
 // ErrDomainNoMX is CLIENT-SAFE: the domain exists but has no MX records,
@@ -48,6 +47,8 @@ func (v *emailViolation) Unwrap() error   { return v.reason }
 // DNS error for logging while keeping errors.Is(err, ErrDomainUnresolvable) working.
 type domainUnresolvable struct{ cause error }
 
-func (e *domainUnresolvable) Error() string   { return ErrDomainUnresolvable.Error() + ": " + e.cause.Error() }
+func (e *domainUnresolvable) Error() string {
+	return ErrDomainUnresolvable.Error() + ": " + e.cause.Error()
+}
 func (e *domainUnresolvable) Is(t error) bool { return t == ErrDomainUnresolvable }
 func (e *domainUnresolvable) Unwrap() error   { return e.cause }

@@ -16,8 +16,8 @@ import (
 type fakeProvider struct{}
 
 func (fakeProvider) Config() authcore.Config { return authcore.DefaultConfig() }
-func (fakeProvider) Logger() authcore.Logger  { return silentLogger{} }
-func (fakeProvider) Keys() authcore.Keys      { return nil }
+func (fakeProvider) Logger() authcore.Logger { return silentLogger{} }
+func (fakeProvider) Keys() authcore.Keys     { return nil }
 
 type silentLogger struct{}
 
