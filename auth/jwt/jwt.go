@@ -186,7 +186,7 @@ func (j *JWT[T]) issueTokens(subject, jti string, extra T) (*TokenPair, error) {
 //	claims, err := jwtMod.VerifyAccessToken(token)
 //	if errors.Is(err, jwt.ErrTokenExpired) { ... }
 func (j *JWT[T]) VerifyAccessToken(token string) (*Claims[T], error) {
-	c, err := verifyAccessToken[T](token, j.pub, j.clock.Now(), j.primaryAudience, j.cfg.ClockSkewLeeway)
+	c, err := verifyAccessToken[T](token, j.pub, j.clock.Now(), j.cfg.Issuer, j.primaryAudience, j.cfg.ClockSkewLeeway)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (j *JWT[T]) VerifyRefreshTokenHash(token, storedHash string) bool {
 //
 // Returns the same errors as VerifyAccessToken.
 func (j *JWT[T]) RotateTokens(refreshToken string, extra T) (*TokenPair, error) {
-	c, err := verifyRefreshToken(refreshToken, j.pub, j.clock.Now(), j.primaryAudience, j.cfg.ClockSkewLeeway)
+	c, err := verifyRefreshToken(refreshToken, j.pub, j.clock.Now(), j.cfg.Issuer, j.primaryAudience, j.cfg.ClockSkewLeeway)
 	if err != nil {
 		return nil, err
 	}

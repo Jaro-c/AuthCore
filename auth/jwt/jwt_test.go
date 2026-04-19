@@ -364,6 +364,45 @@ func TestCreateTokens_wrongAudienceRejectsToken(t *testing.T) {
 	}
 }
 
+func TestVerifyAccessToken_wrongIssuerRejectsToken(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Issuer = "https://auth.service-a.example.com"
+	j := newTestJWT[struct{}](t, newFakeProvider(t), cfg)
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	// Another service that happens to share the signing key (e.g. accidental
+	// key reuse across microservices) must not accept a token issued by the
+	// first service. The iss claim must be checked on verification.
+	cfg2 := DefaultConfig()
+	cfg2.Issuer = "https://auth.service-b.example.com"
+	j2 := newTestJWT[struct{}](t, newFakeProvider(t), cfg2)
+	j2.priv = j.priv
+	j2.pub = j.pub
+
+	_, err := j2.VerifyAccessToken(pair.AccessToken)
+	if !errors.Is(err, ErrTokenInvalid) {
+		t.Errorf("expected ErrTokenInvalid when issuer does not match, got %v", err)
+	}
+}
+
+func TestRotateTokens_wrongIssuerRejectsRefreshToken(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Issuer = "https://auth.service-a.example.com"
+	j := newTestJWT[struct{}](t, newFakeProvider(t), cfg)
+	pair, _ := j.CreateTokens(testSubject, struct{}{})
+
+	cfg2 := DefaultConfig()
+	cfg2.Issuer = "https://auth.service-b.example.com"
+	j2 := newTestJWT[struct{}](t, newFakeProvider(t), cfg2)
+	j2.priv = j.priv
+	j2.pub = j.pub
+
+	_, err := j2.RotateTokens(pair.RefreshToken, struct{}{})
+	if !errors.Is(err, ErrTokenInvalid) {
+		t.Errorf("expected ErrTokenInvalid when issuer does not match, got %v", err)
+	}
+}
+
 func TestRotateTokens_audienceEmbeddedInRefreshToken(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Audience = []string{"https://api.example.com"}

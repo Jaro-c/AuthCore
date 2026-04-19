@@ -283,6 +283,20 @@ func parsePHC(phcHash string) (Config, []byte, []byte, error) {
 		return Config{}, nil, nil, fmt.Errorf("parse parameters: %w", err)
 	}
 
+	// Bound the parsed parameters before handing them to argon2.IDKey. A
+	// corrupted or attacker-supplied hash with m=4_000_000_000 would otherwise
+	// cause the verifier to attempt a multi-TiB allocation and crash the
+	// process. Reuse the same ceilings validateConfig enforces at construction.
+	if cfg.Memory < minMemory || cfg.Memory > maxMemory {
+		return Config{}, nil, nil, fmt.Errorf("memory parameter out of range: got %d, want [%d, %d]", cfg.Memory, minMemory, maxMemory)
+	}
+	if cfg.Iterations < 1 || cfg.Iterations > maxIterations {
+		return Config{}, nil, nil, fmt.Errorf("iterations parameter out of range: got %d, want [1, %d]", cfg.Iterations, maxIterations)
+	}
+	if cfg.Parallelism < 1 {
+		return Config{}, nil, nil, fmt.Errorf("parallelism parameter out of range: got %d, want >= 1", cfg.Parallelism)
+	}
+
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
 		return Config{}, nil, nil, fmt.Errorf("decode salt: %w", err)
