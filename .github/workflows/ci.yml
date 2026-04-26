@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 # Least-privilege GITHUB_TOKEN. Jobs only read the code and upload coverage.
 permissions:
