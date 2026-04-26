@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Run gosec
-        uses: securego/gosec@64b97151cd7b978abdf8d2f1159a4e9096a12c2b # master
+        uses: securego/gosec@4ead098510926e1015958a36dc966bfcb7f6ee11 # master
         with:
           # G104 (errcheck on logger Output) and G306 (public-key 0644) are
           # justified in code with //nolint:gosec; standalone gosec ignores
