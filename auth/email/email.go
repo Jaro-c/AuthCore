@@ -12,6 +12,12 @@
 // during normalisation, matching what DNS actually resolves. Store the
 // canonical ASCII form in your database so lookups are deterministic.
 //
+// Plus-addressing (`user+tag@example.com`) is accepted by default. A
+// deployment that treats `(local, domain)` as the unique account key can
+// opt in to [Config.RejectPlusAddressing] - this is a
+// [configurable policy field](../docs/configuration.md#the-principle),
+// not a security control. The structural rules above stay fixed.
+//
 // The single entry point is [Email.ValidateAndNormalize] — it normalizes
 // (lowercase + trim + punycode) and validates in one step, returning the
 // canonical form.
@@ -93,24 +99,57 @@ type cacheEntry struct {
 // concurrent use after construction. It owns no background goroutine and
 // needs no cleanup; like the other modules, you construct it and use it.
 type Email struct {
-	log      authcore.Logger
-	resolver *net.Resolver
-	cacheTTL time.Duration
-	mu       sync.RWMutex
-	cache    map[string]cacheEntry
-	group    singleflight.Group
+	log                  authcore.Logger
+	resolver             *net.Resolver
+	cacheTTL             time.Duration
+	mu                   sync.RWMutex
+	cache                map[string]cacheEntry
+	group                singleflight.Group
+	rejectPlusAddressing bool // when true, ValidateAndNormalize rejects '+' in the local part
 }
 
 // New creates an Email module using the provider's logger.
+// Equivalent to NewWithConfig(p, Config{}) - accepts the same plus-addressing
+// behaviour as the existing module always has.
 //
 //	emailMod, err := email.New(auth)
 //	if err != nil { ... }
 func New(p authcore.Provider) (*Email, error) {
+	return NewWithConfig(p, Config{})
+}
+
+// Config holds the email module's policy options.
+//
+// Today's behaviour is reproduced by the zero value, so callers that do not
+// need to override anything can keep using New(p). NewWithConfig is the
+// addition: it takes the policy explicitly.
+type Config struct {
+	// RejectPlusAddressing rejects addresses whose local part contains a
+	// '+'. When false (the default), plus-addressing is accepted - the same
+	// behaviour the module has always had.
+	//
+	// This is an account-uniqueness rule, not a security control. RFC 5233
+	// defines plus-addressing so that user+anything@example.com and
+	// user@example.com share one mailbox. Accepting it lets one mailbox own
+	// N accounts: if your product treats (local, domain) as the unique key,
+	// turn this on.
+	RejectPlusAddressing bool
+}
+
+// NewWithConfig creates an Email module with an explicit Config.
+//
+// The zero Config{} reproduces the behaviour of New(p) - today's default.
+//
+//	emailMod, err := email.NewWithConfig(auth, email.Config{
+//	    RejectPlusAddressing: true,
+//	})
+func NewWithConfig(p authcore.Provider, cfg Config) (*Email, error) {
 	e := &Email{
-		log:      p.Logger(),
-		resolver: net.DefaultResolver,
-		cacheTTL: DefaultCacheTTL,
-		cache:    make(map[string]cacheEntry),
+		log:                  p.Logger(),
+		resolver:             net.DefaultResolver,
+		cacheTTL:             DefaultCacheTTL,
+		cache:                make(map[string]cacheEntry),
+		rejectPlusAddressing: cfg.RejectPlusAddressing,
 	}
 	e.log.Info("email: module initialised")
 	return e, nil
@@ -161,6 +200,17 @@ func (e *Email) ValidateAndNormalize(address string) (string, error) {
 	normalized := normalize(address)
 	if err := validate(normalized); err != nil {
 		return "", err
+	}
+	// Plus-addressing is a policy rule applied AFTER structural validation,
+	// so that an address which is structurally invalid for other reasons is
+	// reported with the structural error first (more actionable for the
+	// caller). The check itself is a single byte scan against the already
+	// extracted local part: see ValidateAndNormalize implementation.
+	if e.rejectPlusAddressing {
+		atIdx := strings.LastIndexByte(normalized, '@')
+		if atIdx > 0 && strings.IndexByte(normalized[:atIdx], '+') >= 0 {
+			return "", &emailViolation{reason: fmt.Errorf("plus-addressing is not allowed")}
+		}
 	}
 	return normalized, nil
 }

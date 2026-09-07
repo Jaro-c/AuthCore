@@ -33,15 +33,34 @@ case err != nil:
 db.StorePasswordHash(userID, hash)
 ```
 
-`Hash` validates the password **before** spending CPU on hashing:
+`Hash` validates the password **before** spending CPU on hashing. The
+defaults reproduce the policy the library has always enforced, and every
+bound and required class is a [configurable policy field](configuration.md#the-principle),
+not a security primitive:
 
-| Rule | Requirement |
+| Rule | Default |
 |---|---|
-| Length | 12 – 64 characters |
-| Uppercase | At least one (`A`–`Z`, Unicode-aware) |
-| Lowercase | At least one (`a`–`z`, Unicode-aware) |
-| Digit | At least one (`0`–`9`) |
-| Special | At least one (anything that is not a letter or digit) |
+| Length | `MinLength` – `MaxLength` (default 12 – 64 characters) |
+| Uppercase | `RequireUpper` (default `true`) |
+| Lowercase | `RequireLower` (default `true`) |
+| Digit | `RequireDigit` (default `true`) |
+| Special | `RequireSymbol` (default `true`) |
+
+Each `Require*` field is a `*bool`, so that leaving it unset ("keep the
+default") stays distinguishable from setting it to false ("turn this class
+off"). Use `password.Bool` rather than a temporary local:
+
+```go
+cfg := password.DefaultConfig()
+cfg.MinLength = 16
+cfg.RequireSymbol = password.Bool(false) // no symbol required
+pwdMod, err := password.New(auth, cfg)
+```
+
+`ValidatePolicy` reports the rule that was violated in the error message
+("must be at least 16 characters" when you raise `MinLength` to 16, for
+example), so the message you show the user always matches what you
+configured.
 
 Each call also generates a **fresh random salt**, so two hashes of the same
 password are always different strings — but both verify correctly.
