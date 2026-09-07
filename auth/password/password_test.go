@@ -290,25 +290,26 @@ func TestHash_strongPasswordSucceeds(t *testing.T) {
 // ---- checkPolicy() ----------------------------------------------------------
 
 func TestCheckPolicy_boundaryLengths(t *testing.T) {
-	base := "Aa1!" // 4-char valid seed — pad to reach target length
+	base := "Aa1!"         // 4-char valid seed - pad to reach target length
+	cfg := DefaultConfig() // 12..64, all classes required
 
 	exactly12 := base + strings.Repeat("a", 8)
-	if err := checkPolicy(exactly12); err != nil {
+	if err := checkPolicy(exactly12, cfg); err != nil {
 		t.Errorf("12-char password rejected: %v", err)
 	}
 
 	exactly64 := base + strings.Repeat("a", 60)
-	if err := checkPolicy(exactly64); err != nil {
+	if err := checkPolicy(exactly64, cfg); err != nil {
 		t.Errorf("64-char password rejected: %v", err)
 	}
 
 	tooShort := base + strings.Repeat("a", 7) // 11 chars
-	if checkPolicy(tooShort) == nil {
+	if checkPolicy(tooShort, cfg) == nil {
 		t.Error("11-char password should be rejected")
 	}
 
 	tooLong := base + strings.Repeat("a", 61) // 65 chars
-	if checkPolicy(tooLong) == nil {
+	if checkPolicy(tooLong, cfg) == nil {
 		t.Error("65-char password should be rejected")
 	}
 }

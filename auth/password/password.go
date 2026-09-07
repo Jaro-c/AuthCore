@@ -25,8 +25,12 @@
 //
 // # What is tunable
 //
-// Memory, Iterations, and Parallelism can be increased to match your hardware.
-// The algorithm and output format are never configurable — that's the point.
+// The cryptographic work factor (Memory, Iterations, Parallelism) and the
+// policy (MinLength, MaxLength, RequireUpper, RequireLower, RequireDigit,
+// RequireSymbol) can be raised or lowered to match your product. Defaults
+// reproduce the policy the library has always enforced - see
+// [Config]. The algorithm, salt size, key size, output format, and Unicode
+// NFC normalisation are never configurable - that's the point.
 //
 // # Full usage
 //
@@ -120,7 +124,7 @@ func New(p authcore.Provider, cfg ...Config) (*Password, error) {
 // Name returns the module's unique identifier. It implements authcore.Module.
 func (p *Password) Name() string { return "password" }
 
-// ValidatePolicy reports whether plaintext satisfies the built-in password policy.
+// ValidatePolicy reports whether plaintext satisfies the configured password policy.
 // Use this for fail-fast validation before calling Hash — for example, in an HTTP
 // handler to return a 400 before spending CPU on Argon2id.
 //
@@ -128,38 +132,39 @@ func (p *Password) Name() string { return "password" }
 // specific rule that was violated. The wrapped reason is safe to show the user:
 //
 //	if err := pwdMod.ValidatePolicy(req.Password); err != nil {
-//	    reason := errors.Unwrap(err).Error() // "must be at least 12 characters"
+//	    reason := errors.Unwrap(err).Error() // e.g. "must be at least 16 characters"
 //	    c.JSON(400, gin.H{"error": reason})
 //	}
 //
-// This check is identical to the one Hash performs internally.
+// This check is identical to the one Hash performs internally. The bounds and
+// required classes it enforces come from the module's Config (see
+// [Config.MinLength], [Config.MaxLength] and the [Config.RequireUpper] family),
+// so the message reflects what the caller actually configured.
 func (p *Password) ValidatePolicy(plaintext string) error {
-	if err := checkPolicy(norm.NFC.String(plaintext)); err != nil {
+	if err := checkPolicy(norm.NFC.String(plaintext), p.cfg); err != nil {
 		return &policyViolation{reason: err}
 	}
 	return nil
 }
 
-// checkPolicy validates plaintext against the built-in password policy.
+// checkPolicy validates plaintext against the policy encoded in cfg.
 // It runs in O(n) with a single pass and no memory allocations.
 //
 // Length is measured in Unicode characters (runes), not bytes, so a
 // multibyte passphrase is counted the way a user perceives it: a 4-character
 // CJK password is 4 characters, not 12 bytes.
 //
-// Rules:
-//   - Length between 12 and 64 characters.
-//   - At least one uppercase letter (Unicode-aware).
-//   - At least one lowercase letter (Unicode-aware).
-//   - At least one digit.
-//   - At least one special character (anything that is not a letter or digit).
-func checkPolicy(plaintext string) error {
+// The cfg argument must already have its *bool policy fields resolved
+// (applyDefaults guarantees non-nil), so this function reads them through
+// the pointer without nil checks. The error messages quote cfg.MinLength
+// and cfg.MaxLength, so the caller sees the bound they actually configured.
+func checkPolicy(plaintext string, cfg Config) error {
 	count := utf8.RuneCountInString(plaintext)
-	if count < 12 {
-		return fmt.Errorf("must be at least 12 characters")
+	if count < cfg.MinLength {
+		return fmt.Errorf("must be at least %d characters", cfg.MinLength)
 	}
-	if count > 64 {
-		return fmt.Errorf("must be at most 64 characters")
+	if count > cfg.MaxLength {
+		return fmt.Errorf("must be at most %d characters", cfg.MaxLength)
 	}
 
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
@@ -177,13 +182,13 @@ func checkPolicy(plaintext string) error {
 	}
 
 	switch {
-	case !hasUpper:
+	case *cfg.RequireUpper && !hasUpper:
 		return fmt.Errorf("must contain at least one uppercase letter")
-	case !hasLower:
+	case *cfg.RequireLower && !hasLower:
 		return fmt.Errorf("must contain at least one lowercase letter")
-	case !hasDigit:
+	case *cfg.RequireDigit && !hasDigit:
 		return fmt.Errorf("must contain at least one digit")
-	case !hasSpecial:
+	case *cfg.RequireSymbol && !hasSpecial:
 		return fmt.Errorf("must contain at least one special character")
 	}
 	return nil
@@ -216,7 +221,7 @@ func (p *Password) Hash(plaintext string) (string, error) {
 	plaintext = norm.NFC.String(plaintext)
 
 	// Validate before hashing — fail fast before spending ~64 MiB of RAM on Argon2id.
-	if err := checkPolicy(plaintext); err != nil {
+	if err := checkPolicy(plaintext, p.cfg); err != nil {
 		return "", &policyViolation{reason: err}
 	}
 
