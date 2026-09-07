@@ -112,6 +112,77 @@ db.ReplaceRefreshHash(session.ID, newPair.RefreshTokenHash)
 // 6. Send the new tokens to the client.
 ```
 
+### When not to rotate
+
+Rotation is the recommended default, but there is one shape of client where it
+actively hurts: a frontend that fires several requests in parallel. Two of them
+find the access token expired at the same moment, both refresh with the same
+refresh token, and the second arrives after step 5 has already replaced the
+hash. It gets a 401 for a token that was valid when it was sent, and the user is
+signed out mid-session for no reason. Next.js applications hit this often,
+because the framework fans out data fetches on a single navigation.
+
+Staying non-rotating is supported. Issue with `CreateTokens`, store the hash,
+and verify with `VerifyRefreshTokenHash` on each refresh without ever calling
+`RotateTokens`:
+
+```go
+// Refresh, without rotating: the client keeps the same refresh token.
+if !jwtMod.VerifyRefreshTokenHash(clientToken, session.RefreshTokenHash) {
+    return http.StatusUnauthorized
+}
+// Mint a fresh pair, hand back only the access token, and keep the stored
+// refresh hash as it is. Two requests racing here both succeed.
+pair, err := jwtMod.CreateTokens(session.UserID, freshClaims)
+if err != nil {
+    return http.StatusUnauthorized
+}
+db.UpdateSessionID(session.ID, pair.SessionID) // see below: this is required
+// Return pair.AccessToken. Do not send pair.RefreshToken.
+```
+
+Two things you give up, and the second one surprises people.
+
+**You lose reuse detection.** Rotation is not what detects a stolen refresh
+token; `RotateTokens` only verifies the presented token and reissues it. The
+detection comes from step 5 above: once you have atomically replaced the stored
+hash, a thief replaying the old token fails the lookup, and a legitimate client
+failing the lookup tells you the token leaked. Drop rotation and you drop that
+signal.
+
+**The denylist stops killing the whole session at once.** `CreateTokens` mints a
+fresh `jti` on every call, while `RotateTokens` carries the original one
+forward. Measured on a fixed clock:
+
+| Call | SessionID |
+|---|---|
+| `CreateTokens` | `018fd3ab-c200-771c-b0e0-17fa236d71af` |
+| `CreateTokens` again | `018fd3ab-c200-7115-a937-fd114f66224d` |
+| `RotateTokens` on the first pair | `018fd3ab-c200-771c-b0e0-17fa236d71af` |
+
+So under rotation every access token in a session shares one `jti`, and a single
+denylist entry kills all of them instantly, which is what the `Denylist`
+documentation promises. Refresh with `CreateTokens` instead and each refresh
+starts a new `jti`, so you must store the newest `SessionID` on the session row
+and revoke that one. Access tokens minted under an earlier `jti` are not covered
+by that entry and stay valid until their own `exp`, which is `AccessTokenTTL`,
+15 minutes by default.
+
+That is usually acceptable, but it is a different promise: instant for the
+current segment, up to one access TTL for anything issued before it. If you need
+the stronger guarantee, either rotate, or coalesce refreshes in the client so
+only one is ever in flight.
+
+So the trade is real in both directions:
+
+- **Rotate** when your client refreshes from one place at a time, which covers
+  most mobile apps and server-rendered sessions. You get reuse detection and a
+  session-wide kill switch.
+- **Do not rotate** when your client can refresh concurrently and you would
+  rather not build request coalescing. Compensate with a shorter
+  `AccessTokenTTL`, so the uncovered window shrinks, and keep the stored
+  `SessionID` current.
+
 ## Revocation & logout
 
 Access tokens are **stateless JWTs**: once issued, an access token stays valid

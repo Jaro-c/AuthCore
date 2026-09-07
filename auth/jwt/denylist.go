@@ -25,6 +25,13 @@ const defaultDenylistTimeout = 5 * time.Second
 // SessionID and is stable across rotations — so revoking one entry kills the
 // whole session, every access token in it, immediately.
 //
+// That holds while you refresh with RotateTokens, which carries the original
+// jti forward. CreateTokens mints a fresh one on every call, so a deployment
+// that refreshes by calling CreateTokens instead must store the newest
+// SessionID and revoke that: access tokens issued under an earlier jti are not
+// covered by the entry and remain valid until their own exp. See the "When not
+// to rotate" section of docs/jwt.md.
+//
 // Leaving Config.Denylist nil keeps the stateless fast path: no lookup, no
 // store, no per-request cost.
 type Denylist interface {
