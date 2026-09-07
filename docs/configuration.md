@@ -20,6 +20,7 @@ breaks?
 | `password` | Work factor: `Memory`, `Iterations`, `Parallelism` · Policy: `MinLength`, `MaxLength`, `RequireUpper`, `RequireLower`, `RequireDigit`, `RequireSymbol` | Argon2id algorithm · 16-byte salt · 32-byte key · PHC output format · constant-time compare · Unicode NFC normalisation |
 | `email` | `RejectPlusAddressing` | RFC 5321/5322 parse and normalisation · IDN punycode conversion |
 | `username` | `MinLength`, `MaxLength`, `ExtraReservedNames`, `AllowReservedNames` | Character set `[a-z0-9_-]` · lowercase + trim normalisation · "must start and end with a letter or digit" rule · "no consecutive specials" rule |
+| `totp` | Clock-skew window: `SkewSteps` (`*int`, 0 to 10, default 1, set with `totp.Int`) · `RecoveryCodeCount` (1 to 50, default 10) · `Issuer` (label shown in the authenticator) | HMAC-SHA1 algorithm · 30-second time step · 6-digit codes · 20-byte secrets · constant-time compare · full-window scan before any return |
 
 A field listed under "closed" cannot be configured: trying to do so would
 either be rejected at compile time or be a deliberate error in the code.
