@@ -1,11 +1,19 @@
 // Package username provides username validation and normalization for authcore.
 //
 // Validation rules (applied after normalization):
-//   - Length between 3 and 32 characters (fixed)
+//   - Length between [Config.MinLength] and [Config.MaxLength] (defaults 3 and 32)
 //   - Only lowercase letters, digits, underscores, and hyphens: [a-z0-9_-]
 //   - Must start and end with a letter or digit (not _ or -)
 //   - No consecutive special characters (__, --, _-, -_)
-//   - Not in the built-in reserved names list
+//   - Not in the reserved names set (built-in list, plus
+//     [Config.ExtraReservedNames], minus [Config.AllowReservedNames])
+//
+// The length bounds and reserved-names list are [configurable policy
+// fields](../docs/configuration.md#the-principle). The character set,
+// normalisation, "must start and end with a letter or digit", and
+// "no consecutive specials" rules stay fixed - the character set in
+// particular is the homoglyph control, and widening it to Unicode is
+// exactly what enables impersonation.
 //
 // The single entry point is [Username.ValidateAndNormalize] — it normalizes
 // (lowercase + trim) and validates in one step, returning the canonical form.
@@ -44,22 +52,42 @@ var _ authcore.Module = (*Username)(nil)
 type Username struct {
 	log      authcore.Logger
 	reserved map[string]struct{} // O(1) lookup set built at New() time
+	minLen   int                 // policy: minimum acceptable length in bytes
+	maxLen   int                 // policy: maximum acceptable length in bytes
 }
 
-// New creates a Username module using the provider's logger.
+// New creates a Username module using the provider's logger. Equivalent to
+// NewWithConfig(p, Config{}) - accepts the same length bounds and reserved
+// names as the existing module always has.
 //
 //	userMod, err := username.New(auth)
 //	if err != nil { log.Fatal(err) }
 func New(p authcore.Provider) (*Username, error) {
-	// Build the reserved names lookup set once at startup so every
-	// ValidateAndNormalize call gets O(1) map lookup instead of O(n) slice scan.
-	reserved := make(map[string]struct{}, len(defaultReservedNames))
-	for _, name := range defaultReservedNames {
-		reserved[name] = struct{}{}
+	return NewWithConfig(p, Config{})
+}
+
+// NewWithConfig creates a Username module with an explicit Config.
+//
+// The zero Config{} reproduces the behaviour of New(p) - today's defaults:
+// 3..32 characters, the built-in reserved list, no additions or removals.
+//
+//	userMod, err := username.NewWithConfig(auth, username.Config{
+//	    MinLength: 5,
+//	    AllowReservedNames: []string{"support"},
+//	})
+func NewWithConfig(p authcore.Provider, cfg Config) (*Username, error) {
+	resolved := applyDefaults(cfg)
+	if err := validateConfig(resolved); err != nil {
+		return nil, err
 	}
 
-	u := &Username{log: p.Logger(), reserved: reserved}
-	u.log.Info("username: module initialised (reserved=%d)", len(reserved))
+	u := &Username{
+		log:      p.Logger(),
+		reserved: reservedSet(resolved),
+		minLen:   resolved.MinLength,
+		maxLen:   resolved.MaxLength,
+	}
+	u.log.Info("username: module initialised (reserved=%d, min=%d, max=%d)", len(u.reserved), u.minLen, u.maxLen)
 	return u, nil
 }
 
@@ -105,11 +133,11 @@ func (u *Username) validate(username string) error {
 	if n == 0 {
 		return &usernameViolation{reason: fmt.Errorf("must not be empty")}
 	}
-	if n < minLength {
-		return &usernameViolation{reason: fmt.Errorf("must be at least %d characters", minLength)}
+	if n < u.minLen {
+		return &usernameViolation{reason: fmt.Errorf("must be at least %d characters", u.minLen)}
 	}
-	if n > maxLength {
-		return &usernameViolation{reason: fmt.Errorf("must be at most %d characters", maxLength)}
+	if n > u.maxLen {
+		return &usernameViolation{reason: fmt.Errorf("must be at most %d characters", u.maxLen)}
 	}
 
 	// First character must be a letter or digit — not _ or -.

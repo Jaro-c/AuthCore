@@ -52,6 +52,24 @@ Validation rules (RFC 5321 / RFC 5322):
 > consistent lookup — `User@EXAMPLE.COM` and `user@example.com` are the same
 > address.
 
+### Plus-addressing
+
+Plus-addressing (`user+tag@example.com`) is accepted by default: this is an
+[open policy field](configuration.md#the-principle). A deployment that
+treats `(local, domain)` as the unique account key and wants one mailbox to
+be unable to own N accounts can refuse plus-addressing:
+
+```go
+emailMod, err := email.NewWithConfig(auth, email.Config{
+    RejectPlusAddressing: true,
+})
+// user+tag@example.com is now rejected with the reason "plus-addressing
+// is not allowed".
+```
+
+The structural validation (RFC 5321/5322, IDN punycode, domain rules) is
+unaffected.
+
 > [!NOTE]
 > **Internationalised domains (IDN)** are supported. Unicode domains are
 > converted to ASCII punycode during normalisation:
@@ -121,14 +139,21 @@ db.StoreUser(normalized, ...) // always lowercase, trimmed, validated
 
 Validation rules:
 
-| Rule | Requirement |
+| Rule | Default |
 |---|---|
-| Length | 3 – 32 characters (fixed) |
-| Allowed characters | `[a-z0-9_-]` only |
+| Length | `MinLength` – `MaxLength` (default 3 – 32 characters) |
+| Allowed characters | `[a-z0-9_-]` only (closed - the homoglyph control) |
 | First character | Letter or digit (not `_` or `-`) |
 | Last character | Letter or digit (not `_` or `-`) |
 | Consecutive specials | `__`, `--`, `_-`, `-_` are rejected |
-| Reserved names | Built-in blocklist (fixed) |
+| Reserved names | Built-in blocklist, extended with `Config.ExtraReservedNames` and trimmed with `Config.AllowReservedNames` |
+
+The length bounds and the reserved-names list are
+[configurable policy fields](configuration.md#the-principle). The
+character set, normalisation, and consecutive-specials rule stay closed - 
+widening the character set to Unicode is exactly what enables
+homoglyph impersonation, and is the part of the module that *is* a
+security standard rather than a product default.
 
 > **Always normalize before storing and before querying.** `Alice123` and
 > `alice123` are the same username — store only the canonical (normalized) form.
