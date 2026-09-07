@@ -1,0 +1,455 @@
+// Package totp provides Time-based One-Time Password (TOTP, RFC 6238)
+// authentication for authcore.
+//
+// TOTP is the algorithm behind the six-digit rotating codes shown by
+// Google Authenticator, 1Password, Authy and every other authenticator
+// app. authcore enrolls a user by minting a high-entropy shared secret,
+// returns an otpauth:// URI that the user's app scans as a QR code, and
+// verifies the codes the user subsequently produces - all in constant
+// time, with built-in replay protection.
+//
+//	auth, _   := authcore.New(authcore.DefaultConfig())
+//	totpMod, _ := totp.New(auth)
+//
+//	// Enroll - show the URI to the user, store secret + recovery hashes.
+//	enr, _ := totpMod.Enroll("alice@example.com")
+//	db.StoreTOTP(userID, enr.Secret, enr.RecoveryHashes)
+//
+//	// Verify - compare, then store the returned step as lastUsedStep.
+//	step, err := totpMod.Verify(secret, presented, lastStep)
+//	if errors.Is(err, totp.ErrCodeReused) { revokeFactor(userID); return }
+//	if err != nil { return http.StatusUnauthorized }
+//	db.SetLastStep(userID, step)
+//
+// # What is fixed and what is open
+//
+// The cryptographic layer is closed: HMAC-SHA1, 30-second time step,
+// 6-digit codes, 20-byte secrets and constant-time comparison are the
+// interoperability baseline - every widely-used authenticator app
+// ignores the algorithm, digits and period parameters of an otpauth://
+// URI and assumes SHA1/6/30. A configurable value here produces an
+// enrollment that works in your test environment and locks the user out
+// on their phone.
+//
+// The policy layer is open with secure defaults: the clock-skew window
+// (SkewSteps), the number of recovery codes (RecoveryCodeCount) and the
+// issuer label (Issuer) can be tuned per deployment without weakening
+// the security floor. See docs/configuration.md for the principle.
+//
+// # Replay protection
+//
+// A TOTP code stays valid for its whole 30-second window, so an attacker
+// who observes one can replay it until the window closes. The module
+// refuses to hide the problem: Verify returns the matched time step
+// and refuses any step at or below lastUsedStep with ErrCodeReused. A
+// caller who always passes 0 has NO replay protection - that is
+// documented on Verify itself.
+package totp
+
+import (
+	"crypto/hmac"
+	"crypto/rand" //nolint:gosec // CSPRNG draws for secrets and recovery codes
+	"crypto/sha1" //nolint:gosec // HMAC-SHA1 is the TOTP interoperability baseline; SHA1 collision attacks do not apply to HMAC
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base32"
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/Glyndor/authcore"
+	"github.com/Glyndor/authcore/internal/clock"
+)
+
+// Compile-time assertion: *TOTP must satisfy authcore.Module.
+var _ authcore.Module = (*TOTP)(nil)
+
+// Cryptographic constants fixed by RFC 6238 §1.2 and the otpauth
+// interoperability baseline. They are intentionally not configurable.
+const (
+	digits    = 6  // every authenticator app assumes this
+	timeStep  = 30 // 30-second window
+	secretLen = 20 // 160-bit shared secret per RFC 4226 §4 R1
+	algoSHA1  = "SHA1"
+)
+
+// recoveryLen is the byte length of a single recovery code CSPRNG draw.
+// 10 bytes = 80 bits, formatted as two base32 groups of 8 chars joined
+// by a hyphen (e.g. "ABCD1234-EFGH5678").
+const recoveryLen = 10
+
+// Enrollment is the result of Enroll.
+//
+// Show Secret, URI and RecoveryCodes to the user EXACTLY ONCE - none is
+// recoverable afterwards. Persist Secret (the lookup key, base32) and
+// RecoveryHashes (the verification material). Never persist the raw
+// RecoveryCodes; they must not survive the enrollment request.
+type Enrollment struct {
+	// Secret is the shared secret in base32 (no padding), the form
+	// authenticator apps accept for manual entry.
+	Secret string
+	// URI is the otpauth:// URI to encode in the QR code the user scans.
+	URI string
+	// RecoveryCodes are the raw recovery codes, formatted as two base32
+	// groups of 8 chars separated by a hyphen. Hand them to the user
+	// ONCE; the caller must delete them from memory after display.
+	RecoveryCodes []string
+	// RecoveryHashes are the corresponding HMAC-SHA256 digests of the
+	// raw codes (peppered with the library's refresh secret). Store
+	// these and pass them to VerifyRecoveryCode. The mapping is
+	// positional: RecoveryHashes[i] is the hash of RecoveryCodes[i].
+	RecoveryHashes []string
+}
+
+// TOTP is the TOTP module.
+//
+// Construct one instance at application startup using New and share it
+// across goroutines. TOTP is safe for concurrent use after construction.
+type TOTP struct {
+	cfg    Config
+	log    authcore.Logger
+	secret []byte      // HMAC-SHA256 pepper for recovery-code hashing
+	clock  clock.Clock // injected; replaced by clock.Fixed in tests
+}
+
+// New creates a TOTP module.
+//
+// cfg is optional - omit it, or pass a zero-value Config, to apply the
+// safe defaults (SkewSteps=1, RecoveryCodeCount=10, Issuer="").
+//
+//	totpMod, err := totp.New(auth)                      // defaults
+//	totpMod, err := totp.New(auth, totp.DefaultConfig()) // explicit
+//	totpMod, err := totp.New(auth, totp.Config{Issuer: "Acme"})
+//
+// One caveat for the zero-value Config{}: SkewSteps=0 is a meaningful
+// value ("no skew, only the current step matches"), not a sentinel
+// for "use the default", so applyDefaults deliberately does not
+// substitute 1 in its place. To get SkewSteps=1 with no other
+// configuration, pass nothing to New, or pass DefaultConfig().
+//
+// The module reads the parent AuthCore's logger and refresh secret; it
+// generates no key material of its own.
+func New(p authcore.Provider, cfg ...Config) (*TOTP, error) {
+	var resolved Config
+	if len(cfg) > 0 {
+		resolved = applyDefaults(cfg[0])
+	} else {
+		resolved = DefaultConfig()
+	}
+	if err := validateConfig(resolved); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+	}
+
+	t := &TOTP{
+		cfg:    resolved,
+		log:    p.Logger(),
+		secret: p.Keys().RefreshSecret(),
+		clock:  clock.New(p.Config().Timezone),
+	}
+	t.log.Info("totp: module initialised (skew=%d, recovery_codes=%d, issuer=%q)",
+		resolved.SkewSteps, resolved.RecoveryCodeCount, resolved.Issuer)
+	return t, nil
+}
+
+// Name returns the module's unique identifier. It implements authcore.Module.
+func (t *TOTP) Name() string { return "totp" }
+
+// Enroll generates a fresh shared secret for accountName, an otpauth://
+// URI the user's app can scan as a QR code, and a set of recovery codes.
+// Returned values must be shown to the user ONCE (URI as QR, RecoveryCodes
+// as a printable list). An empty Config.Issuer means the URI is built
+// without the issuer parameter and the label, and the authenticator
+// displays only the account name.
+func (t *TOTP) Enroll(accountName string) (*Enrollment, error) {
+	secretBytes, err := randomBytes(secretLen)
+	if err != nil {
+		return nil, fmt.Errorf("totp: generate secret: %w", err)
+	}
+	secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(secretBytes)
+
+	uri, err := buildURI(t.cfg.Issuer, accountName, secret)
+	if err != nil {
+		return nil, fmt.Errorf("totp: build uri: %w", err)
+	}
+
+	rawCodes := make([]string, t.cfg.RecoveryCodeCount)
+	hashes := make([]string, t.cfg.RecoveryCodeCount)
+	for i := 0; i < t.cfg.RecoveryCodeCount; i++ {
+		buf, err := randomBytes(recoveryLen)
+		if err != nil {
+			return nil, fmt.Errorf("totp: generate recovery code: %w", err)
+		}
+		encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf)
+		formatted := formatRecoveryCode(encoded)
+		rawCodes[i] = formatted
+		// hashRecoveryCode normalises on the way in, so the stored
+		// hash matches what VerifyRecoveryCode computes regardless
+		// of how the user typed the code.
+		hashes[i] = t.hashRecoveryCode(formatted)
+	}
+
+	t.log.Debug("totp: enrolled (account=%q, recovery_codes=%d)", accountName, len(rawCodes))
+
+	return &Enrollment{
+		Secret:         secret,
+		URI:            uri,
+		RecoveryCodes:  rawCodes,
+		RecoveryHashes: hashes,
+	}, nil
+}
+
+// Verify checks candidate code against secret for the current time step
+// and the configured skew window. It returns the time step the code
+// matched on success.
+//
+// # Replay protection
+//
+// lastUsedStep is REQUIRED. Pass the time step Verify returned on the
+// previous successful verification for this user (0 if no previous
+// verification is known). Any step at or below lastUsedStep is refused
+// with ErrCodeReused - even if the code is otherwise valid.
+//
+// A caller who always passes 0 has NO replay protection: every code
+// that matches the current window is accepted, including codes the
+// user has already used. That is correct for a first verification, and
+// the documented wrong behaviour for every other.
+//
+// Storing the returned step:
+//
+//	step, err := totpMod.Verify(secret, presented, lastStep)
+//	switch {
+//	case errors.Is(err, totp.ErrCodeReused):
+//	    // A code already accepted was tried again - security event.
+//	    log.Warn("totp: replay attempt")
+//	    revokeFactor(userID)
+//	    return
+//	case err != nil:
+//	    return http.StatusUnauthorized
+//	}
+//	db.SetLastStep(userID, step)
+//
+// Errors:
+//
+//	totp.ErrInvalidCode   - six digits, matches no step in the window
+//	totp.ErrMalformedCode - not six decimal digits
+//	totp.ErrInvalidSecret - secret is not valid base32
+//	totp.ErrCodeReused    - matches a step at or below lastUsedStep
+func (t *TOTP) Verify(secret, code string, lastUsedStep uint64) (uint64, error) {
+	if !isSixDigits(code) {
+		return 0, ErrMalformedCode
+	}
+	key, err := decodeSecret(secret)
+	if err != nil {
+		return 0, err
+	}
+
+	currentStep := uint64(t.clock.Now().Unix()) / timeStep
+
+	// Scan every step in the window. Never early-return on the first
+	// match: that would let an attacker distinguish "matched the
+	// current step" from "matched a neighbouring step" by timing.
+	var matchedStep uint64
+	var matched byte
+	skew := uint64(*t.cfg.SkewSteps)
+	// When currentStep is smaller than skew the lower bound wraps to a
+	// value near the top of the uint64 range, which is above the upper
+	// bound, so the loop body does not run and Verify reports no match.
+	// That needs the clock to read within skew steps of the Unix epoch, so
+	// it cannot happen in production, and reporting no match is the safe
+	// answer when it does. There is no negative step: this is uint64.
+	for step := currentStep - skew; step <= currentStep+skew; step++ {
+		if stepMatches(step, key, code) {
+			matched = 1
+			matchedStep = step
+		}
+	}
+
+	if matched == 0 {
+		return 0, ErrInvalidCode
+	}
+	if matchedStep <= lastUsedStep {
+		return 0, ErrCodeReused
+	}
+	return matchedStep, nil
+}
+
+// HashRecoveryCode returns the keyed HMAC-SHA256 hex digest of code,
+// matching the values stored in Enrollment.RecoveryHashes.
+func (t *TOTP) HashRecoveryCode(code string) string {
+	return t.hashRecoveryCode(code)
+}
+
+// VerifyRecoveryCode reports whether code matches any of storedHashes,
+// scanning every hash in constant time. Returns the zero-based index of
+// the matched hash and true on success. The caller MUST mark that code
+// as used (delete or flag the row) before the next call - otherwise the
+// same code can be redeemed repeatedly.
+//
+// Verification normalises code on the way in (hyphens and spaces are
+// stripped, letters are uppercased), so users can read codes off a
+// printout with any grouping they like.
+func (t *TOTP) VerifyRecoveryCode(code string, storedHashes []string) (int, bool) {
+	candidate := t.hashRecoveryCode(normalizeRecoveryCode(code))
+	var matchedIdx int
+	var matched byte
+	for i, h := range storedHashes {
+		if subtle.ConstantTimeCompare([]byte(candidate), []byte(h)) == 1 {
+			matched = 1
+			matchedIdx = i
+		}
+	}
+	if matched == 0 {
+		return 0, false
+	}
+	return matchedIdx, true
+}
+
+// randomBytes returns n bytes of CSPRNG output.
+func randomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// hashRecoveryCode returns the keyed HMAC-SHA256 hex digest of the
+// normalised form of code (no hyphens, no spaces, uppercase), peppered
+// with the library's managed refresh secret. Normalising here means
+// Enroll, HashRecoveryCode and VerifyRecoveryCode all hash the same
+// byte sequence regardless of how the user typed the code.
+func (t *TOTP) hashRecoveryCode(code string) string {
+	mac := hmac.New(sha256.New, t.secret)
+	mac.Write([]byte(normalizeRecoveryCode(code)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// decodeSecret decodes a base32 secret (with or without padding) into
+// raw bytes. Empty input is invalid: Enroll never produces an empty
+// secret, so an empty value here means a corrupted store.
+func decodeSecret(s string) ([]byte, error) {
+	if s == "" {
+		return nil, ErrInvalidSecret
+	}
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding)
+	if len(s)%8 != 0 {
+		// Tolerate padded input as well.
+		enc = base32.StdEncoding
+	}
+	key, err := enc.DecodeString(s)
+	if err != nil || len(key) == 0 {
+		return nil, ErrInvalidSecret
+	}
+	return key, nil
+}
+
+// stepMatches reports whether code equals the 6-digit TOTP value for
+// step under key, comparing in constant time.
+func stepMatches(step uint64, key []byte, code string) bool {
+	otp := generateTOTP(key, step)
+	return subtle.ConstantTimeCompare([]byte(otp), []byte(code)) == 1
+}
+
+// generateTOTP returns the 6-digit decimal TOTP value for step under
+// key (RFC 4226 HOTP on an 8-byte big-endian counter).
+func generateTOTP(key []byte, step uint64) string {
+	mac := hmac.New(sha1.New, key) //nolint:gosec // HMAC-SHA1 is the TOTP interoperability baseline
+	var counter [8]byte
+	binary.BigEndian.PutUint64(counter[:], step)
+	mac.Write(counter[:])
+	sum := mac.Sum(nil)
+	// RFC 4226 §5.3 dynamic truncation.
+	offset := sum[len(sum)-1] & 0x0F
+	truncated := (uint32(sum[offset])&0x7F)<<24 |
+		uint32(sum[offset+1])<<16 |
+		uint32(sum[offset+2])<<8 |
+		uint32(sum[offset+3])
+	mod := truncated % 1_000_000
+	return fmt.Sprintf("%06d", mod)
+}
+
+// buildURI assembles the otpauth:// URI for the enrollment.
+//
+// With Issuer set:
+//
+//	otpauth://totp/{issuer}:{account}?secret={secret}&issuer={issuer}
+//
+// Both issuer occurrences are percent-encoded; the colon between them
+// stays literal (it is structural). With Issuer empty:
+//
+//	otpauth://totp/{account}?secret={secret}
+//
+// The authenticator algorithm, digits and period are also included so
+// any client that does parse them sees the closed defaults.
+func buildURI(issuer, account, secret string) (string, error) {
+	q := url.Values{}
+	q.Set("secret", secret)
+	q.Set("algorithm", algoSHA1)
+	q.Set("digits", strconv.Itoa(digits))
+	q.Set("period", strconv.Itoa(timeStep))
+
+	var path string
+	if issuer != "" {
+		// The colon is structural; ":", "@" and the sub-delims are
+		// safe inside a URL path (RFC 3986 §3.3) so url.URL does
+		// not re-escape it.
+		path = "/" + url.PathEscape(issuer) + ":" + url.PathEscape(account)
+		q.Set("issuer", issuer)
+	} else {
+		path = "/" + url.PathEscape(account)
+	}
+
+	u := url.URL{
+		Scheme:   "otpauth",
+		Host:     "totp",
+		Path:     path,
+		RawQuery: q.Encode(),
+	}
+	return u.String(), nil
+}
+
+// isSixDigits reports whether s is exactly six ASCII decimal digits.
+func isSixDigits(s string) bool {
+	if len(s) != 6 {
+		return false
+	}
+	for i := 0; i < 6; i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// formatRecoveryCode inserts a hyphen at the midpoint of an 8-character
+// base32 string. 10 raw bytes encode to 16 base32 chars, so the split
+// is 8/8: "ABCD1234EFGH5678" -> "ABCD1234-EFGH5678".
+func formatRecoveryCode(encoded string) string {
+	if len(encoded) != 16 {
+		return encoded
+	}
+	return encoded[:8] + "-" + encoded[8:]
+}
+
+// normalizeRecoveryCode strips hyphens and spaces and uppercases so
+// users can read codes off a printout with any grouping.
+func normalizeRecoveryCode(code string) string {
+	var b strings.Builder
+	b.Grow(len(code))
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case c == '-' || c == ' ':
+			// drop
+		case c >= 'a' && c <= 'z':
+			b.WriteByte(c - 32)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}

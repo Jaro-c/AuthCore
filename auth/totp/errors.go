@@ -1,0 +1,50 @@
+package totp
+
+import "errors"
+
+// Sentinel errors returned by the totp package.
+// Use errors.Is to check for these in calling code.
+var (
+	// ErrInvalidConfig is returned by New when the provided Config fails
+	// validation (e.g. SkewSteps above 10, RecoveryCodeCount out of range).
+	//
+	// Safety: INTERNAL — a startup/programming error. Treat as a 500.
+	ErrInvalidConfig = errors.New("totp: invalid configuration")
+
+	// ErrInvalidSecret is returned by Verify when the presented secret is not
+	// valid base32 (with or without padding). The caller should treat this
+	// as a programming or storage error: secrets minted by Enroll are always
+	// valid, so an invalid one means the stored value was corrupted.
+	//
+	// Safety: INTERNAL — do not echo back to the client.
+	ErrInvalidSecret = errors.New("totp: invalid base32 secret")
+
+	// ErrMalformedCode is returned by Verify when the candidate code is not
+	// exactly six decimal digits. Distinct from ErrInvalidCode so the caller
+	// can tell apart "the code shape is wrong" from "the code is the right
+	// shape but does not match".
+	//
+	// Safety: CLIENT-SAFE — both cases are the same outcome to the user
+	// (reject), but the distinction is useful for logs and for rate-limiting
+	// policies that want to count malformed inputs separately.
+	ErrMalformedCode = errors.New("totp: code must be six decimal digits")
+
+	// ErrInvalidCode is returned by Verify when the candidate code has the
+	// right shape (six digits) but does not match any time step in the
+	// verification window.
+	//
+	// Safety: CLIENT-SAFE — return a generic "unauthorized" to the client.
+	ErrInvalidCode = errors.New("totp: code does not match")
+
+	// ErrCodeReused is returned by Verify when the candidate code matches a
+	// time step that has already been accepted (one whose step is less than
+	// or equal to lastUsedStep). It is the module's only signal that a
+	// replay was attempted; the caller should treat it as a security event
+	// and revoke the user's second factor.
+	//
+	// Safety: CLIENT-SAFE — the caller chooses the response. The user-visible
+	// message is normally the same as ErrInvalidCode to avoid telling an
+	// attacker the code was once valid, but the caller MUST log this case
+	// distinctly because it is the signal that a stolen code was tried.
+	ErrCodeReused = errors.New("totp: code already used")
+)

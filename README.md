@@ -65,7 +65,7 @@ if ok, _ := pwd.Verify("Str0ng-P@ssword!", hash); ok {
 authcore is an in-process library, not a hosted identity platform: it ships no
 database and no HTTP server of its own, generates and manages its own signing
 keys on first run, and each module (password, jwt, apikey, oauth, email,
-username) can be used independently.
+username, totp) can be used independently.
 
 ## Modules
 
@@ -78,13 +78,14 @@ Pick only what you need — each is independent, testable, and safe by default.
 | 📧 | **[email](docs/validation.md)** | Validate + normalize. RFC 5321/5322, optional cached DNS MX check. |
 | 👤 | **[username](docs/validation.md)** | Validate + normalize. Reserved-name blocklist, character rules. |
 | 🗝️ | **[apikey](docs/apikey.md)** | Opaque API keys. Generate, keyed-hash for storage, constant-time verify. |
+| 🔐 | **[totp](docs/totp.md)** | TOTP / RFC 6238 second factor. Enroll, verify (with replay protection), recovery codes. |
 | 🌐 | **[oauth](docs/oauth.md)** | Social login — Google, Microsoft (OIDC) and GitHub, Discord (OAuth2). Auth Code + PKCE, ID-token validation or userinfo. |
 
 ```mermaid
 flowchart LR
     App["Your app"] -->|init once| Core["authcore"]
     Core -->|auto-generates| Keys[("🔑 Ed25519 + HMAC<br/>on disk")]
-    Core -->|Provider| M["password · jwt · apikey · oauth<br/>email · username"]
+    Core -->|Provider| M["password · jwt · apikey · oauth<br/>email · username · totp"]
     M -->|hash · sign · verify| App
 ```
 
@@ -93,7 +94,7 @@ flowchart LR
 **New here? Start with the [Secure login recipe](docs/secure-login.md)** — the
 step-by-step flow that turns these primitives into a login an auditor accepts.
 
-[Secure login recipe](docs/secure-login.md) · [Password](docs/password.md) · [JWT](docs/jwt.md) · [Email & username](docs/validation.md) · [API keys](docs/apikey.md) · [OIDC login](docs/oauth.md) · [Key management](docs/key-management.md) · [Configuration](docs/configuration.md) · [Testing & modules](docs/testing.md) · [Migrating from bcrypt](docs/migrating.md) · [Errors](docs/errors.md) · [FAQ](docs/faq.md) · [Versioning](docs/versioning.md)
+[Secure login recipe](docs/secure-login.md) · [Password](docs/password.md) · [JWT](docs/jwt.md) · [Email & username](docs/validation.md) · [API keys](docs/apikey.md) · [TOTP](docs/totp.md) · [OIDC login](docs/oauth.md) · [Key management](docs/key-management.md) · [Configuration](docs/configuration.md) · [Testing & modules](docs/testing.md) · [Migrating from bcrypt](docs/migrating.md) · [Errors](docs/errors.md) · [FAQ](docs/faq.md) · [Versioning](docs/versioning.md)
 
 Full API reference on [pkg.go.dev](https://pkg.go.dev/github.com/Glyndor/authcore).
 
