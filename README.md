@@ -74,7 +74,7 @@ Pick only what you need — each is independent, testable, and safe by default.
 | | Module | Does |
 |---|---|---|
 | 🔑 | **[password](docs/password.md)** | Hash + verify. Argon2id, policy-enforced, self-describing PHC format. |
-| 🎫 | **[jwt](docs/jwt.md)** | Access + refresh tokens. EdDSA / Ed25519, generic claims, rotation. |
+| 🎫 | **[jwt](docs/jwt.md)** | Access + refresh tokens. EdDSA / Ed25519, generic claims, rotation, optional denylist for instant revocation. |
 | 📧 | **[email](docs/validation.md)** | Validate + normalize. RFC 5321/5322, optional cached DNS MX check. |
 | 👤 | **[username](docs/validation.md)** | Validate + normalize. Reserved-name blocklist, character rules. |
 | 🗝️ | **[apikey](docs/apikey.md)** | Opaque API keys. Generate, keyed-hash for storage, constant-time verify. |
