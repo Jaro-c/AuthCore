@@ -21,6 +21,8 @@ breaks?
 | `email` | `RejectPlusAddressing` | RFC 5321/5322 parse and normalisation · IDN punycode conversion |
 | `username` | `MinLength`, `MaxLength`, `ExtraReservedNames`, `AllowReservedNames` | Character set `[a-z0-9_-]` · lowercase + trim normalisation · "must start and end with a letter or digit" rule · "no consecutive specials" rule |
 | `totp` | Clock-skew window: `SkewSteps` (`*int`, 0 to 10, default 1, set with `totp.Int`) · `RecoveryCodeCount` (1 to 50, default 10) · `Issuer` (label shown in the authenticator) | HMAC-SHA1 algorithm · 30-second time step · 6-digit codes · 20-byte secrets · constant-time compare · full-window scan before any return |
+| `credential` | `TTL` (token lifetime, positive to 24h, default 1h) | 256-bit CSPRNG token · base64-URL no-padding encoding · HMAC-SHA256 hash with the library pepper · `purpose \|\| 0x00 \|\| subject \|\| 0x00 \|\| token` binding · constant-time compare run before the expiry check so wall-clock time does not reveal whether a token existed |
+| `field` | `Context` (column name the module is protecting, required, no zero-value default) | AES-256-GCM with 12-byte random nonce per call · HKDF-SHA256 derivation of encryption and index keys from the library refresh secret with distinct `authcore/field/aes-256-gcm/v1` and `authcore/field/blind-index/v1` info labels · length-prefixed `Context` bound into both the GCM AAD and the blind index input · HMAC-SHA256 hex blind index · base64-RawStdEncoding of `nonce \|\| sealed` |
 
 A field listed under "closed" cannot be configured: trying to do so would
 either be rejected at compile time or be a deliberate error in the code.
